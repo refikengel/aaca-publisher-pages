@@ -1,40 +1,130 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-sprachen="de en" data-titel-de="Nutzungsbedingungen – IT-Engel" data-titel-en="Terms of Service – IT-Engel">
 <head>
 <meta charset="utf-8">
-<title>Terms of Service — AACA-Publisher</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.6; color: #222; }
-h1 { font-size: 1.5rem; }
-h2 { font-size: 1.1rem; margin-top: 2rem; }
-a { color: #0a66c2; }
-</style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Nutzungsbedingungen · Terms of Service – IT-Engel</title>
+<meta name="description" content="Nutzungsbedingungen von AACA-Publisher, einem Werkzeug des Betreibers für die eigenen Konten. / Terms of Service of AACA-Publisher, a tool the operator uses for their own accounts.">
+<link rel="stylesheet" href="style.css?v=6">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script src="site.js?v=6"></script>
 </head>
 <body>
-<h1>Terms of Service</h1>
-<p>Stand: 2026-10-15</p>
+<a class="skip-link" href="#inhalt"><span lang="de">Zum Inhalt springen</span><span class="trenner"> / </span><span lang="en">Skip to content</span></a>
 
-<h2>1. Geltungsbereich</h2>
-<p>AACA-Publisher ist ein privates, nicht-kommerzielles Automatisierungs-Tool
-zur Veröffentlichung von Video-Content auf TikTok. Es wird ausschließlich
-von seinem Betreiber für dessen eigene(n) TikTok-Kanal/Kanäle genutzt und
-nicht Dritten als Dienst zur Verfügung gestellt.</p>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><picture><source media="(prefers-color-scheme: dark)" srcset="logo-kopf-hell.png"><img class="logo" src="logo-kopf.png" width="772" height="658" alt="IT-Engel"></picture></a>
+    <nav class="sprachwahl" aria-label="Sprache / Language" data-label-de="Sprache" data-label-en="Language">
+      <a href="#de" hreflang="de" lang="de">Deutsch</a>
+      <a href="#en" hreflang="en" lang="en">English</a>
+    </nav>
+  </div>
+</header>
 
-<h2>2. Nutzung</h2>
-<p>Durch die Autorisierung dieser Anwendung über TikTok erteilst du der
-Anwendung die Berechtigung, in deinem Namen Video-Inhalte gemäß den von dir
-gewährten Berechtigungen (Scopes) hochzuladen. Die Anwendung handelt dabei
-ausschließlich im Auftrag des Kontoinhabers.</p>
+<main id="inhalt" class="wrap seite">
+  <h1 class="zweisprachig"><span lang="de">Nutzungsbedingungen</span> <span class="trenner" aria-hidden="true">·</span> <span lang="en">Terms of Service</span></h1>
+  <p class="meta"><span lang="de">Stand: 24. Oktober 2026</span><span class="trenner"> · </span><span lang="en">Last updated: 24 October 2026</span></p>
 
-<h2>3. Haftungsausschluss</h2>
-<p>Die Nutzung erfolgt auf eigenes Risiko. Es wird keine Gewähr für
-ununterbrochene Verfügbarkeit übernommen.</p>
+  <section id="de" lang="de" aria-labelledby="de-1">
+    <p class="sprachkopf"><strong>Deutsche Fassung</strong> · <a href="#en" hreflang="en" lang="en">English version</a></p>
 
-<h2>4. Kontakt</h2>
-<p>Fragen zu diesen Nutzungsbedingungen richten Sie bitte an den Betreiber
-der Domain thermup.de.</p>
+    <h2 id="de-1">1. Anbieter und Geltungsbereich</h2>
+    <p>AACA-Publisher ist ein Werkzeug des Betreibers dieser Website (Kanäle „IT-Engel“); die Angaben zum Betreiber stehen im <a href="impressum.html">Impressum</a>. Das Werkzeug wird ausschließlich vom Betreiber für dessen eigene Konten und Kanäle genutzt. Es wird nicht als Dienst für andere Personen angeboten: Es gibt keine Registrierung, keine Benutzerkonten und keinen Zugang für Dritte. Diese Bedingungen beschreiben, was das Werkzeug tut und unter welchen Voraussetzungen es auf Plattformkonten zugreift.</p>
 
-<p><a href="index.html">Zurück</a></p>
+    <h2>2. Was AACA-Publisher tut</h2>
+    <p>AACA-Publisher übergibt fertige Videos samt Titel, Beschreibung und Hashtags über die offiziellen Programmierschnittstellen (APIs) von YouTube, Instagram, Facebook und Pinterest an die Konten des Betreibers. Soweit die Plattform es erlaubt und der Betreiber es autorisiert hat, kann das Werkzeug außerdem Kennzahlen der eigenen Konten abrufen. Der Betreiber bedient das Werkzeug über einen Telegram-Bot und gibt jede Veröffentlichung vorher frei.</p>
+    <p>Welche Verbindungen aktiv sind, hängt davon ab, ob die jeweilige Plattform die Anwendung freigegeben hat. Solange das nicht der Fall ist, gelten für die Anwendung die Beschränkungen, die die Plattform für nicht freigegebene Anwendungen vorsieht.</p>
+
+    <h2>3. Autorisierung und Widerruf</h2>
+    <p>Die Anwendung greift nur dann auf ein Konto zu, wenn der Kontoinhaber sie bei der jeweiligen Plattform ausdrücklich autorisiert hat, und nur im Rahmen der dort angezeigten Berechtigungen. Sie handelt dabei ausschließlich im Auftrag des Kontoinhabers.</p>
+    <p>Die Autorisierung kann jederzeit in den Einstellungen des jeweiligen Kontos widerrufen werden (Bereich für verbundene Apps bzw. Berechtigungen; die Bezeichnung kann je nach Plattform und Version abweichen). Für Google-Konten ist das unter <a href="https://security.google.com/settings/security/permissions">security.google.com/settings/security/permissions</a> möglich. Nach einem Widerruf greift die Anwendung nicht mehr auf das Konto zu. Zur Löschung von Daten siehe die <a href="privacy.html#data-deletion-de">Datenschutzerklärung</a>.</p>
+    <p>Autorisiert eine andere Person als der Betreiber die Anwendung, zum Beispiel ein Prüfer der Plattform im Rahmen der App-Prüfung, gelten diese Bedingungen und die Datenschutzerklärung für diese Autorisierung ebenso.</p>
+
+    <h2>4. Inhalte, KI und Werbung</h2>
+    <p>Die veröffentlichten Inhalte entstehen mit Unterstützung von KI und werden vom Betreiber geprüft und freigegeben. Die Sprecherstimme der Videos ist synthetisch. Beiträge können Werbung enthalten, etwa Affiliate-Links, mit denen der Betreiber eine Provision verdienen kann; solche Beiträge werden als Werbung gekennzeichnet. Die Inhalte sind allgemeine Informationen und keine individuelle Beratung. Für die von ihm veröffentlichten Inhalte ist der Betreiber verantwortlich.</p>
+
+    <h2>5. Bedingungen der Plattformen</h2>
+    <p>Zusätzlich gelten die Bedingungen und Richtlinien der Plattformen, die der Betreiber beachtet:</p>
+    <ul>
+      <li><strong>YouTube:</strong> <a href="https://www.youtube.com/t/terms">YouTube-Nutzungsbedingungen</a>. Wer die YouTube-Funktionen von AACA-Publisher nutzt oder die Anwendung für ein YouTube-Konto autorisiert, ist an die YouTube-Nutzungsbedingungen gebunden.</li>
+      <li><strong>Instagram und Facebook:</strong> <a href="https://developers.facebook.com/terms/">Plattformbedingungen von Meta</a></li>
+      <li><strong>Pinterest:</strong> <a href="https://developers.pinterest.com/terms/">Developer Terms</a> und <a href="https://policy.pinterest.com/en/terms-of-service">Nutzungsbedingungen</a></li>
+      <li><strong>Telegram:</strong> <a href="https://telegram.org/tos">Nutzungsbedingungen</a></li>
+    </ul>
+
+    <h2>6. Keine Verbindung zu den Plattformen</h2>
+    <p>AACA-Publisher steht in keiner Verbindung zu Google bzw. YouTube, Meta (Instagram, Facebook), Pinterest oder Telegram und wird von diesen weder gefördert noch unterstützt. Die genannten Namen und Marken gehören ihren jeweiligen Inhabern.</p>
+
+    <h2>7. Verfügbarkeit</h2>
+    <p>Das Werkzeug läuft auf Systemen des Betreibers. Es kann jederzeit geändert, unterbrochen oder eingestellt werden. Ein Anspruch auf Verfügbarkeit besteht nicht.</p>
+
+    <h2>8. Änderungen dieser Bedingungen</h2>
+    <p>Der Betreiber kann diese Bedingungen anpassen, zum Beispiel wenn weitere Plattformen angebunden werden oder sich Vorgaben der Plattformen ändern. Es gilt die jeweils hier veröffentlichte Fassung; das Datum oben nennt den Stand.</p>
+
+    <h2>9. Kontakt</h2>
+    <p>Fragen zu diesen Bedingungen: E-Mail <mark class="platzhalter">[PLATZHALTER: Kontakt-E-Mail-Adresse]</mark>. Angaben zum Betreiber stehen im <a href="impressum.html">Impressum</a>.</p>
+
+    <p class="hinweis">Maßgeblich ist die deutsche Fassung; die englische Fassung dient dem besseren Verständnis.</p>
+  </section>
+
+  <section id="en" lang="en" aria-labelledby="en-1">
+    <p class="sprachkopf"><strong>English version</strong> · <a href="#de" hreflang="de" lang="de">Deutsche Fassung</a></p>
+
+    <h2 id="en-1">1. Provider and scope</h2>
+    <p>AACA-Publisher is a tool belonging to the operator of this website (the “IT-Engel” channels); information about the operator is in the <a href="impressum.html">Impressum</a> (legal notice). The tool is used solely by the operator for the operator’s own accounts and channels. It is not offered as a service to other people: there is no registration, there are no user accounts and no access for third parties. These terms describe what the tool does and under which conditions it accesses platform accounts.</p>
+
+    <h2>2. What AACA-Publisher does</h2>
+    <p>AACA-Publisher transfers finished videos, with title, description and hashtags, to the operator’s accounts through the official application programming interfaces (APIs) of YouTube, Instagram, Facebook and Pinterest. Where the platform allows it and the operator has authorized it, the tool can also retrieve metrics for the operator’s own accounts. The operator controls the tool through a Telegram bot and approves every publication beforehand.</p>
+    <p>Which connections are active depends on whether the respective platform has approved the application. As long as that is not the case, the restrictions the platform applies to applications that have not been approved apply.</p>
+
+    <h2>3. Authorization and revocation</h2>
+    <p>The application accesses an account only if the account holder has explicitly authorized it on the respective platform, and only within the permissions shown there. It acts solely on behalf of the account holder.</p>
+    <p>The authorization can be revoked at any time in the settings of the respective account (section for connected apps or permissions; the name may differ by platform and version). For Google accounts this is possible at <a href="https://security.google.com/settings/security/permissions">security.google.com/settings/security/permissions</a>. After revocation the application no longer accesses the account. For the deletion of data see the <a href="privacy.html#data-deletion">Privacy Policy</a>.</p>
+    <p>If a person other than the operator authorizes the application, for example a platform reviewer during app review, these terms and the Privacy Policy apply to that authorization as well.</p>
+
+    <h2>4. Content, AI and advertising</h2>
+    <p>The content that is published is created with the help of AI and is reviewed and approved by the operator. The narration in the videos is synthetic. Posts may contain advertising, such as affiliate links through which the operator may earn a commission; such posts are labeled as advertising. The content is general information and not individual advice. The operator is responsible for the content published by the operator.</p>
+
+    <h2>5. Platform terms</h2>
+    <p>The terms and policies of the platforms apply in addition. The operator complies with them:</p>
+    <ul>
+      <li><strong>YouTube:</strong> <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>. Anyone who uses the YouTube functions of AACA-Publisher or authorizes the application for a YouTube account is bound by the YouTube Terms of Service.</li>
+      <li><strong>Instagram and Facebook:</strong> <a href="https://developers.facebook.com/terms/">Meta Platform Terms</a></li>
+      <li><strong>Pinterest:</strong> <a href="https://developers.pinterest.com/terms/">Developer Terms</a> and <a href="https://policy.pinterest.com/en/terms-of-service">Terms of Service</a></li>
+      <li><strong>Telegram:</strong> <a href="https://telegram.org/tos">Terms of Service</a></li>
+    </ul>
+
+    <h2>6. No affiliation with the platforms</h2>
+    <p>AACA-Publisher is not affiliated with Google or YouTube, Meta (Instagram, Facebook), Pinterest or Telegram, and is neither endorsed nor sponsored by them. The names and trademarks mentioned belong to their respective owners.</p>
+
+    <h2>7. Availability</h2>
+    <p>The tool runs on systems operated by the operator. It may be changed, interrupted or discontinued at any time. There is no entitlement to availability.</p>
+
+    <h2>8. Changes to these terms</h2>
+    <p>The operator may update these terms, for example when further platforms are connected or when platform requirements change. The version published here applies; the date above shows when it was last updated.</p>
+
+    <h2>9. Contact</h2>
+    <p>Questions about these terms: email <mark class="platzhalter">[PLATZHALTER: Kontakt-E-Mail-Adresse]</mark>. Information about the operator is in the <a href="impressum.html">Impressum</a> (legal notice).</p>
+
+    <p class="hinweis">The German version prevails; the English version is provided for convenience.</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Rechtliches / Legal" data-label-de="Rechtliches" data-label-en="Legal">
+      <ul>
+        <li><a href="terms.html"><span lang="en">Terms of Service</span><span class="trenner"> / </span><span lang="de">Nutzungsbedingungen</span></a></li>
+        <li><a href="privacy.html"><span lang="en">Privacy Policy</span><span class="trenner"> / </span><span lang="de">Datenschutz (Anwendung)</span></a></li>
+        <li><a href="impressum.html"><span lang="de">Impressum</span><span class="trenner"> / </span><span lang="en">Legal notice</span></a></li>
+        <li><a href="datenschutz.html" hreflang="de"><span lang="de">Datenschutzerklärung (Website)</span><span class="trenner"> / </span><span lang="en">Website privacy notice (German)</span></a></li>
+      </ul>
+    </nav>
+    <p>IT-Engel · thermup.de</p>
+    <p class="material"><span lang="de">3D-Film: eigene Modelle, im Browser gerendert mit three.js (MIT-Lizenz). Schrift: Raleway (SIL Open Font License). <a href="assets/CREDITS.txt">Alle Nachweise</a></span> <span lang="en">3D film: own models, rendered in the browser with three.js (MIT License). Font: Raleway (SIL Open Font License). <a href="assets/CREDITS.txt" hreflang="de">All credits</a></span></p>
+  </div>
+</footer>
 </body>
 </html>

@@ -1,20 +1,552 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-sprachen="de en">
 <head>
 <meta charset="utf-8">
-<title>AACA-Publisher</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.6; color: #222; }
-h1 { font-size: 1.5rem; }
-a { color: #0a66c2; }
-</style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#080c17" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3ecdc" media="(prefers-color-scheme: light)">
+<title>IT-Engel</title>
+<meta name="description" content="IT-Engel: Kurzvideos des Betreibers, KI-gestützt erstellt und mit synthetischer Sprecherstimme. Kanäle, Kontakt und rechtliche Angaben. / IT-Engel: short videos by the operator, created with AI assistance and a synthetic voice. Channels, contact and legal information.">
+<link rel="preload" href="assets/fonts/Raleway-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css?v=7">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script src="site.js?v=7"></script>
+<script src="film.js?v=7"></script>
+<script src="kanaele.js?v=7"></script>
+<script src="motion.js"></script>
 </head>
 <body>
-<h1>AACA-Publisher</h1>
-<p>AACA-Publisher ist ein internes Automatisierungs-Tool zur Veröffentlichung
-von Video-Content über die TikTok Content Posting API. Es wird ausschließlich
-für die eigenen Kanäle des Betreibers verwendet.</p>
-<p><a href="terms.html">Terms of Service</a> · <a href="privacy.html">Privacy Policy</a></p>
+<a class="skip-link" href="#inhalt"><span lang="de">Zum Inhalt springen</span><span class="trenner"> / </span><span lang="en">Skip to content</span></a>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-musik" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+    <symbol id="i-youtube" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9l5 3-5 3z"/></symbol>
+    <symbol id="i-instagram" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></symbol>
+    <symbol id="i-facebook" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.4-6.5-11a6.5 6.5 0 0 1 13 0c0 5.6-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></symbol>
+    <symbol id="i-pfeil" viewBox="0 0 24 24"><path d="M7 17L17 7M8 7h9v9"/></symbol>
+    <symbol id="i-runter" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></symbol>
+    <symbol id="i-datei" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+    <symbol id="i-herz" viewBox="0 0 24 24"><path d="M12 20.3s-7.2-4.4-8.9-9C1.9 8 3.8 4.6 7.3 4.6c2 0 3.6 1.1 4.7 2.7 1.1-1.6 2.7-2.7 4.7-2.7 3.5 0 5.4 3.4 4.2 6.7-1.7 4.6-8.9 9-8.9 9z"/></symbol>
+    <symbol id="i-sprechblase" viewBox="0 0 24 24"><path d="M12 4c4.7 0 8.5 3.1 8.5 7s-3.8 7-8.5 7c-1 0-2-.1-2.9-.4L5 19.5l1.2-3.6C4.5 14.6 3.5 12.9 3.5 11c0-3.9 3.8-7 8.5-7z"/></symbol>
+    <symbol id="i-lesezeichen" viewBox="0 0 24 24"><path d="M7 3.5h10a1 1 0 0 1 1 1v16l-6-4-6 4v-16a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-teilen" viewBox="0 0 24 24"><path d="M13.5 5l7 6.5-7 6.5v-3.6c-4.6 0-7.7 1.5-10 4.6.8-5 3.8-9.2 10-10V5z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-haus" viewBox="0 0 24 24"><path d="M4 11l8-6.5 8 6.5v8.5h-5.5v-5h-5v5H4z"/></symbol>
+    <symbol id="i-suche" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/></symbol>
+    <symbol id="i-nachricht" viewBox="0 0 24 24"><path d="M4 5.5h16v11H9.5L4 20z"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/></symbol>
+    <symbol id="i-daumen" viewBox="0 0 24 24"><path d="M7.5 10.5v9h-3v-9zM7.5 19.5h9.2a2 2 0 0 0 2-1.6l1.1-5.6a2 2 0 0 0-2-2.4h-4.3l.8-3.6a1.8 1.8 0 0 0-3.2-1.5l-3.6 5.7"/></symbol>
+    <symbol id="i-erde" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.4 2.4 3.4 5 3.4 8s-1 5.6-3.4 8c-2.4-2.4-3.4-5-3.4-8s1-5.6 3.4-8z"/></symbol>
+    <symbol id="i-mehr" viewBox="0 0 24 24"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01"/></symbol>
+    <symbol id="i-raster" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9.3 4v16M14.7 4v16M4 9.3h16M4 14.7h16"/></symbol>
+    <symbol id="i-reels" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M4 9h16M9 4l2.5 5M14.5 4L17 9M10.5 12.2v4.6l4-2.3z"/></symbol>
+    <symbol id="i-menue" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-p" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10.4 20.3l2.1-9M10.7 9.6c.6-1.3 1.8-2.1 3.1-2.1 1.9 0 3.2 1.4 3.2 3.2 0 2.3-1.6 4.1-3.7 4.1-.9 0-1.6-.3-2-.8"/></symbol>
+    <symbol id="i-weiter" viewBox="0 0 24 24"><path d="M6 6l8 6-8 6zM17 6v12"/></symbol>
+    <symbol id="i-laut" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4zM15.5 9a4 4 0 0 1 0 6M17.8 6.8a7 7 0 0 1 0 10.4"/></symbol>
+    <symbol id="i-zahnrad" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M6 18l1.6-1.6M16.4 7.6L18 6"/></symbol>
+    <symbol id="i-vollbild" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><picture><source media="(prefers-color-scheme: dark)" srcset="logo-kopf-hell.png"><img class="logo" src="logo-kopf.png" width="772" height="658" alt="IT-Engel"></picture></a>
+    <div class="kopf-rechts">
+      <nav class="sprachwahl" aria-label="Sprache / Language" data-label-de="Sprache" data-label-en="Language">
+        <a href="#de" hreflang="de" lang="de">Deutsch</a>
+        <a href="#en" hreflang="en" lang="en">English</a>
+      </nav>
+      <button type="button" class="pause" aria-pressed="false" aria-label="Animationen pausieren / Pause animations" title="Animationen pausieren / Pause animations" data-label-de="Animationen pausieren" data-label-en="Pause animations" hidden>
+        <svg class="icon icon-pause" aria-hidden="true" focusable="false"><use href="#i-pause"/></svg>
+        <svg class="icon icon-play" aria-hidden="true" focusable="false"><use href="#i-play"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="inhalt">
+  <div class="film" id="film">
+    <div class="buehne">
+      <div class="himmel" aria-hidden="true"><div class="himmel-sterne"></div><div class="himmel-gluehen"></div></div>
+      <div class="film-anker" aria-hidden="true"></div>
+      <canvas class="film-3d" aria-hidden="true"></canvas>
+      <canvas class="film-leinwand" aria-hidden="true"></canvas>
+
+      <section class="hero" aria-labelledby="hero-titel">
+        <div class="wrap wrap--breit hero-inner">
+          <div class="hero-text">
+            <p class="eyebrow" aria-hidden="true">we make it himmlisch</p>
+            <h1 id="hero-titel">IT-Engel</h1>
+            <p class="hero-lead" lang="de">Kurzvideos des Betreibers – KI-gestützt erstellt, mit synthetischer Sprecherstimme.</p>
+            <p class="hero-lead" lang="en">Short videos by the operator – created with AI assistance, with a synthetic voice.</p>
+            <p class="hero-cta">
+              <a class="knopf-link knopf-primaer" href="#kanaele"><span lang="de">Kanäle</span><span class="trenner"> · </span><span lang="en">Channels</span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-runter"/></svg></a>
+              <a class="knopf-link knopf-sekundaer" href="#kontakt"><span lang="de">Kontakt</span><span class="trenner"> · </span><span lang="en">Contact</span></a>
+            </p>
+          </div>
+          <div class="rund rund-hero" aria-hidden="true">
+            <div class="rund-fenster">
+              <img class="rund-bild" src="assets/img/hero.webp" alt="" width="720" height="720">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="film-kapitel" aria-hidden="true">
+        <article class="kap" data-kap="weg">
+          <div class="kap-text">
+            <p class="kap-nr">06<span class="rest"><span lang="de">Stationen</span><span class="trenner"> · </span><span lang="en">Stations</span></span></p>
+            <p class="kap-titel"><span lang="de">Der Weg eines Videos</span><span lang="en">The path of a video</span></p>
+            <p lang="de">Schicht für Schicht: von der Idee bis zur Veröffentlichung.</p>
+            <p lang="en">Layer by layer: from the idea to publication.</p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="thema">
+          <div class="kap-text">
+            <p class="kap-nr">01<span class="rest">/ 06</span></p>
+            <p class="kap-titel"><span lang="de">Thema</span><span lang="en">Topic</span></p>
+            <p lang="de">Themen entstehen mit Unterstützung von KI-Modellen.</p>
+            <p lang="en">Topics are created with the help of AI models.</p>
+            <p class="kap-marke"><span lang="de">KI-gestützt</span><span lang="en">AI-assisted</span></p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="skript">
+          <div class="kap-text">
+            <p class="kap-nr">02<span class="rest">/ 06</span></p>
+            <p class="kap-titel"><span lang="de">Skript</span><span lang="en">Script</span></p>
+            <p lang="de">Texte und Skripte entstehen ebenfalls mit Unterstützung von KI-Modellen.</p>
+            <p lang="en">Texts and scripts are also created with the help of AI models.</p>
+            <p class="kap-marke"><span lang="de">KI-gestützt</span><span lang="en">AI-assisted</span></p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="stimme">
+          <div class="kap-text">
+            <p class="kap-nr">03<span class="rest">/ 06</span></p>
+            <p class="kap-titel"><span lang="de">Stimme</span><span lang="en">Voice</span></p>
+            <p lang="de">Die Sprecherstimme der Videos ist computererzeugt. Es handelt sich nicht um die Aufnahme einer sprechenden Person.</p>
+            <p lang="en">The narration in the videos is computer-generated. It is not a recording of a person speaking.</p>
+            <p class="kap-marke"><span lang="de">Synthetische Stimme</span><span lang="en">Synthetic voice</span></p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="quellen">
+          <div class="kap-text">
+            <p class="kap-nr">04<span class="rest">/ 06</span></p>
+            <p class="kap-titel"><span lang="de">Quellen</span><span lang="en">Sources</span></p>
+            <p lang="de">Zu Sachaussagen nennt der Betreiber die Quellen – in der Beschreibung des Beitrags oder auf der Link-Seite zum Kanal.</p>
+            <p lang="en">For factual statements the operator names the sources – in the post description or on the channel’s link page.</p>
+            <p class="kap-marke"><span lang="de">Quellen genannt</span><span lang="en">Sources named</span></p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="freigabe">
+          <div class="kap-text">
+            <p class="kap-nr">05<span class="rest">/ 06</span></p>
+            <p class="kap-titel"><span lang="de">Freigabe</span><span lang="en">Approval</span></p>
+            <p lang="de">Der Betreiber prüft jedes Video und gibt es vor der Veröffentlichung frei.</p>
+            <p lang="en">The operator reviews every video and approves it before publication.</p>
+            <p class="kap-marke"><span lang="de">Vom Betreiber freigegeben</span><span lang="en">Approved by the operator</span></p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="kanaele">
+          <div class="kap-text">
+            <p class="kap-nr">06<span class="rest">/ 06</span></p>
+            <p class="kap-titel"><span lang="de">Kanäle</span><span lang="en">Channels</span></p>
+            <p lang="de">Veröffentlicht wird auf den eigenen Konten des Betreibers. Beiträge mit Werbung sind gekennzeichnet.</p>
+            <p lang="en">Published on the operator’s own accounts. Posts containing advertising are labeled.</p>
+            <p class="kap-marke"><span lang="de">Werbung gekennzeichnet</span><span lang="en">Ads labeled</span></p>
+          </div>
+        </article>
+
+        <article class="kap" data-kap="ziel">
+          <div class="kap-text">
+            <p class="kap-titel">we make it himmlisch</p>
+            <p lang="de">Darunter: die Kanäle, Einzelheiten zur Veröffentlichung und der Kontakt.</p>
+            <p lang="en">Below: the channels, details on publishing and the contact.</p>
+          </div>
+        </article>
+
+      </div>
+
+      <div class="film-start" aria-hidden="true"><span><span lang="de">Scrollen</span><span class="trenner"> · </span><span lang="en">Scroll</span></span><i></i></div>
+      <a class="film-skip" href="#kanaele"><span><span lang="de">Film überspringen</span><span class="trenner"> · </span><span lang="en">Skip intro</span></span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-runter"/></svg></a>
+    </div>
+  </div>
+
+  <!-- Der Weg eines Videos als Text: sichtbar nur ohne Film (ohne Skript, „Bewegung reduzieren“, Pause, schwaches Gerät);
+       läuft der Film, ist der Abschnitt nur für Hilfstechnik da (Textfassung der Filmkapitel) -->
+  <section id="weg" class="abschnitt weg-text" aria-labelledby="weg-titel">
+    <div class="wrap wrap--breit">
+      <header class="abschnitt-kopf">
+        <div>
+          <p class="eyebrow" aria-hidden="true"><span lang="de">Sechs Stationen</span><span class="trenner"> · </span><span lang="en">Six stations</span></p>
+          <h2 id="weg-titel"><span lang="de">Der Weg eines Videos</span><span lang="en">The path of a video</span></h2>
+        </div>
+        <div>
+          <p class="intro" lang="de">So entstehen die Videos – von der Idee bis zur Veröffentlichung.</p>
+          <p class="intro" lang="en">How the videos are made – from the idea to publication.</p>
+        </div>
+      </header>
+      <ol class="weg">
+        <li class="station">
+          <p class="station-nr" aria-hidden="true">01</p>
+          <div class="station-kopf">
+            <h3><span lang="de">Thema</span><span class="trenner"> · </span><span lang="en">Topic</span></h3>
+            <p class="station-marke"><span lang="de">KI-gestützt</span><span class="trenner"> · </span><span lang="en">AI-assisted</span></p>
+          </div>
+          <div class="station-text">
+            <p lang="de">Themen entstehen mit Unterstützung von KI-Modellen.</p>
+            <p lang="en">Topics are created with the help of AI models.</p>
+          </div>
+        </li>
+        <li class="station">
+          <p class="station-nr" aria-hidden="true">02</p>
+          <div class="station-kopf">
+            <h3><span lang="de">Skript</span><span class="trenner"> · </span><span lang="en">Script</span></h3>
+            <p class="station-marke"><span lang="de">KI-gestützt</span><span class="trenner"> · </span><span lang="en">AI-assisted</span></p>
+          </div>
+          <div class="station-text">
+            <p lang="de">Texte und Skripte entstehen ebenfalls mit Unterstützung von KI-Modellen.</p>
+            <p lang="en">Texts and scripts are also created with the help of AI models.</p>
+          </div>
+        </li>
+        <li class="station">
+          <p class="station-nr" aria-hidden="true">03</p>
+          <div class="station-kopf">
+            <h3><span lang="de">Stimme</span><span class="trenner"> · </span><span lang="en">Voice</span></h3>
+            <p class="station-marke"><span lang="de">Synthetische Stimme</span><span class="trenner"> · </span><span lang="en">Synthetic voice</span></p>
+          </div>
+          <div class="station-text">
+            <p lang="de">Die Sprecherstimme der Videos ist computererzeugt. Es handelt sich nicht um die Aufnahme einer sprechenden Person.</p>
+            <p lang="en">The narration in the videos is computer-generated. It is not a recording of a person speaking.</p>
+          </div>
+        </li>
+        <li class="station">
+          <p class="station-nr" aria-hidden="true">04</p>
+          <div class="station-kopf">
+            <h3><span lang="de">Quellen</span><span class="trenner"> · </span><span lang="en">Sources</span></h3>
+            <p class="station-marke"><span lang="de">Quellen genannt</span><span class="trenner"> · </span><span lang="en">Sources named</span></p>
+          </div>
+          <div class="station-text">
+            <p lang="de">Zu Sachaussagen nennt der Betreiber die Quellen – in der Beschreibung des Beitrags oder auf der Link-Seite zum Kanal.</p>
+            <p lang="en">For factual statements the operator names the sources – in the post description or on the channel’s link page.</p>
+          </div>
+        </li>
+        <li class="station">
+          <p class="station-nr" aria-hidden="true">05</p>
+          <div class="station-kopf">
+            <h3><span lang="de">Freigabe</span><span class="trenner"> · </span><span lang="en">Approval</span></h3>
+            <p class="station-marke"><span lang="de">Vom Betreiber freigegeben</span><span class="trenner"> · </span><span lang="en">Approved by the operator</span></p>
+          </div>
+          <div class="station-text">
+            <p lang="de">Der Betreiber prüft jedes Video und gibt es vor der Veröffentlichung frei.</p>
+            <p lang="en">The operator reviews every video and approves it before publication.</p>
+          </div>
+        </li>
+        <li class="station">
+          <p class="station-nr" aria-hidden="true">06</p>
+          <div class="station-kopf">
+            <h3><span lang="de">Kanäle</span><span class="trenner"> · </span><span lang="en">Channels</span></h3>
+            <p class="station-marke"><span lang="de">Werbung gekennzeichnet</span><span class="trenner"> · </span><span lang="en">Ads labeled</span></p>
+          </div>
+          <div class="station-text">
+            <p lang="de">Veröffentlicht wird auf den eigenen Konten des Betreibers. Beiträge können Werbung enthalten, zum Beispiel Links zu Produkten, an denen der Betreiber eine Provision verdienen kann (Affiliate-Links). Solche Beiträge werden als Werbung gekennzeichnet.</p>
+            <p lang="en">Published on the operator’s own accounts. Posts may contain advertising, for example links to products for which the operator may earn a commission (affiliate links). Such posts are labeled as advertising.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="kanaele" class="abschnitt kanaele-abschnitt" aria-labelledby="kanaele-titel">
+    <div class="kanalfilm" id="kanalfilm">
+      <div class="kanal-buehne">
+        <div class="wrap wrap--breit kanal-kopf">
+          <header class="abschnitt-kopf">
+            <div>
+              <p class="eyebrow" aria-hidden="true"><span lang="de">Eigene Konten</span><span class="trenner"> · </span><span lang="en">Own accounts</span></p>
+              <h2 id="kanaele-titel"><span lang="de">Kanäle</span><span lang="en">Channels</span></h2>
+            </div>
+            <div>
+              <p class="intro" lang="de">Die Videos erscheinen auf diesen Konten des Betreibers, überall unter dem Namen IT-Engel.</p>
+              <p class="intro" lang="en">The videos appear on these accounts of the operator, everywhere under the name IT-Engel.</p>
+            </div>
+          </header>
+        </div>
+
+        <nav class="kanal-wahl" aria-label="Kanäle / Channels" data-label-de="Kanäle" data-label-en="Channels">
+          <a href="#kanal-tiktok" class="kw-tiktok"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-musik"/></svg><span class="nur-sr">TikTok</span></a>
+          <a href="#kanal-youtube" class="kw-youtube"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-youtube"/></svg><span class="nur-sr">YouTube</span></a>
+          <a href="#kanal-instagram" class="kw-instagram"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-instagram"/></svg><span class="nur-sr">Instagram</span></a>
+          <a href="#kanal-facebook" class="kw-facebook"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-facebook"/></svg><span class="nur-sr">Facebook</span></a>
+          <a href="#kanal-pinterest" class="kw-pinterest"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-p"/></svg><span class="nur-sr">Pinterest</span></a>
+        </nav>
+
+        <ul class="kanaele">
+          <!-- TikTok: dunkler Feed im Hochformat, Aktionsleiste rechts, Cyan und Rot -->
+          <li class="kanal-eintrag k-tiktok" id="kanal-tiktok" data-kanal="tiktok">
+            <a class="kanal" href="https://www.tiktok.com/@itengel">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-musik"/></svg>
+              <span class="kanal-text"><strong>TikTok</strong><span class="kanal-name">@itengel</span><span class="kanal-zeile"><span lang="de">Kurzvideos, vom Betreiber selbst hochgeladen.</span><span class="trenner"> / </span><span lang="en">Short videos, uploaded by the operator personally.</span></span></span>
+              <span class="kanal-los"><span lang="de">Zum Kanal</span><span lang="en">Open channel</span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg></span>
+              <svg class="icon pfeil" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg>
+            </a>
+            <div class="kanal-szene" aria-hidden="true">
+              <div class="szene-grund"></div>
+              <div class="geraet">
+                <div class="geraet-schirm tt">
+                  <div class="tt-feed">
+                    <div class="tt-video motiv motiv-feder"><i class="staub"></i></div>
+                    <div class="tt-video motiv motiv-halo"><i class="staub"></i></div>
+                  </div>
+                  <div class="tt-kopf"><span><span lang="de">Folge ich</span><span lang="en">Following</span></span><b><span lang="de">Für dich</span><span lang="en">For You</span></b><svg class="tt-suche"><use href="#i-suche"/></svg></div>
+                  <div class="tt-leiste">
+                    <span class="tt-profil avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"><i class="tt-plus"></i></span>
+                    <span class="tt-knopf tt-like"><svg><use href="#i-herz"/></svg></span>
+                    <span class="tt-knopf"><svg><use href="#i-sprechblase"/></svg></span>
+                    <span class="tt-knopf"><svg><use href="#i-lesezeichen"/></svg></span>
+                    <span class="tt-knopf"><svg><use href="#i-teilen"/></svg></span>
+                    <span class="tt-platte avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span>
+                  </div>
+                  <div class="tt-herzen"><i></i><i></i><i></i><i></i><i></i></div>
+                  <div class="tt-text"><b>@itengel</b><span>we make it himmlisch</span></div>
+                  <div class="tt-nav"><svg><use href="#i-haus"/></svg><svg><use href="#i-person"/></svg><span class="tt-neu"></span><svg><use href="#i-nachricht"/></svg><svg><use href="#i-person"/></svg></div>
+                </div>
+                <i class="geraet-insel"></i>
+              </div>
+            </div>
+          </li>
+
+          <!-- YouTube: Wiedergabeseite im Hochformat, dann dreht sich das Gerät ins Vollbild (Querformat) -->
+          <li class="kanal-eintrag k-youtube" id="kanal-youtube" data-kanal="youtube">
+            <a class="kanal" href="https://www.youtube.com/@PLATZHALTER_YOUTUBE">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-youtube"/></svg>
+              <span class="kanal-text"><strong>YouTube</strong><span class="kanal-name"><mark class="platzhalter">[PLATZHALTER: Adresse des YouTube-Kanals]</mark></span><span class="kanal-zeile"><span lang="de">Kurzvideos im Hochformat (Shorts).</span><span class="trenner"> / </span><span lang="en">Vertical short videos (Shorts).</span></span></span>
+              <span class="kanal-los"><span lang="de">Zum Kanal</span><span lang="en">Open channel</span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg></span>
+              <svg class="icon pfeil" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg>
+            </a>
+            <div class="kanal-szene" aria-hidden="true">
+              <div class="szene-grund"></div>
+              <div class="geraet yt-geraet">
+                <div class="geraet-schirm yt">
+                  <div class="yt-hoch">
+                    <div class="yt-film motiv motiv-halo"><i class="staub"></i></div>
+                    <i class="yt-balken"><i></i><b></b></i>
+                    <div class="yt-info">
+                      <p class="yt-titel">we make it himmlisch</p>
+                      <div class="yt-kanalzeile"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span><b>IT-Engel</b><span class="yt-abo"><span lang="de">Abonnieren</span><span lang="en">Subscribe</span></span></div>
+                      <div class="yt-chips"><span><svg><use href="#i-daumen"/></svg></span><span><svg><use href="#i-teilen"/></svg></span><span><svg><use href="#i-lesezeichen"/></svg></span><span><svg><use href="#i-mehr"/></svg></span></div>
+                      <p class="yt-regal">Shorts</p>
+                      <div class="yt-shorts"><i class="motiv motiv-gold"></i><i class="motiv motiv-boegen"></i><i class="motiv motiv-feder"></i></div>
+                    </div>
+                  </div>
+                  <div class="yt-quer">
+                    <div class="yt-film motiv motiv-halo"><i class="staub"></i></div>
+                    <div class="yt-oben"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span><b>we make it himmlisch</b><svg><use href="#i-zahnrad"/></svg></div>
+                    <div class="yt-unten">
+                      <i class="yt-balken"><i></i><b></b></i>
+                      <div class="yt-knoepfe"><svg class="yt-pause"><use href="#i-pause"/></svg><svg><use href="#i-weiter"/></svg><svg><use href="#i-laut"/></svg><span class="yt-abo"><span lang="de">Abonnieren</span><span lang="en">Subscribe</span></span><svg><use href="#i-vollbild"/></svg></div>
+                    </div>
+                  </div>
+                </div>
+                <i class="geraet-insel"></i>
+              </div>
+            </div>
+          </li>
+
+          <!-- Instagram: helles Profil mit Ring in den Instagram-Farben und Raster -->
+          <li class="kanal-eintrag k-instagram" id="kanal-instagram" data-kanal="instagram">
+            <a class="kanal" href="https://www.instagram.com/PLATZHALTER_INSTAGRAM/">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-instagram"/></svg>
+              <span class="kanal-text"><strong>Instagram</strong><span class="kanal-name"><mark class="platzhalter">[PLATZHALTER: Adresse des Instagram-Kontos]</mark></span><span class="kanal-zeile"><span lang="de">Kurzvideos als Reels.</span><span class="trenner"> / </span><span lang="en">Short videos as Reels.</span></span></span>
+              <span class="kanal-los"><span lang="de">Zum Kanal</span><span lang="en">Open channel</span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg></span>
+              <svg class="icon pfeil" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg>
+            </a>
+            <div class="kanal-szene" aria-hidden="true">
+              <div class="szene-grund"><i class="ig-schweben s1"><svg><use href="#i-herz"/></svg></i><i class="ig-schweben s2"><svg><use href="#i-sprechblase"/></svg></i><i class="ig-schweben s3"><svg><use href="#i-herz"/></svg></i></div>
+              <div class="geraet ig-geraet">
+                <div class="geraet-schirm ig">
+                  <div class="ig-kopf"><b>IT-Engel</b><span><svg><use href="#i-plus"/></svg><svg><use href="#i-menue"/></svg></span></div>
+                  <div class="ig-profil">
+                    <span class="ig-ring"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span></span>
+                    <div class="ig-name"><b>IT-Engel</b><span>we make it himmlisch</span></div>
+                  </div>
+                  <div class="ig-knoepfe"><span class="ig-folgen"><span lang="de">Folgen</span><span lang="en">Follow</span></span><span><span lang="de">Nachricht</span><span lang="en">Message</span></span></div>
+                  <div class="ig-highlights"><i class="motiv motiv-feder"></i><i class="motiv motiv-halo"></i><i class="motiv motiv-gold"></i><i class="motiv motiv-boegen"></i></div>
+                  <div class="ig-tabs"><svg><use href="#i-raster"/></svg><svg><use href="#i-reels"/></svg><svg><use href="#i-person"/></svg></div>
+                  <div class="ig-raster"><i class="motiv motiv-halo"></i><i class="motiv motiv-gold"></i><i class="motiv motiv-feder"></i><i class="motiv motiv-boegen"></i><i class="motiv motiv-staub"></i><i class="motiv motiv-halo"></i><i class="motiv motiv-feder"></i><i class="motiv motiv-staub"></i><i class="motiv motiv-gold"></i></div>
+                  <span class="ig-herz"><svg><use href="#i-herz"/></svg></span>
+                  <div class="ig-nav"><svg><use href="#i-haus"/></svg><svg><use href="#i-suche"/></svg><svg><use href="#i-plus"/></svg><svg><use href="#i-reels"/></svg><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span></div>
+                </div>
+                <i class="geraet-insel"></i>
+              </div>
+            </div>
+          </li>
+
+          <!-- Facebook: heller Feed, Beitrag mit „Gefällt mir“ -->
+          <li class="kanal-eintrag k-facebook" id="kanal-facebook" data-kanal="facebook">
+            <a class="kanal" href="https://www.facebook.com/PLATZHALTER_FACEBOOK">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-facebook"/></svg>
+              <span class="kanal-text"><strong>Facebook</strong><span class="kanal-name"><mark class="platzhalter">[PLATZHALTER: Adresse der Facebook-Seite]</mark></span><span class="kanal-zeile"><span lang="de">Kurzvideos als Reels auf der Seite.</span><span class="trenner"> / </span><span lang="en">Short videos as Reels on the page.</span></span></span>
+              <span class="kanal-los"><span lang="de">Zum Kanal</span><span lang="en">Open channel</span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg></span>
+              <svg class="icon pfeil" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg>
+            </a>
+            <div class="kanal-szene" aria-hidden="true">
+              <div class="szene-grund"><i class="fb-schweben s1"><svg><use href="#i-daumen"/></svg></i><i class="fb-schweben s2"><svg><use href="#i-herz"/></svg></i><i class="fb-schweben s3"><svg><use href="#i-daumen"/></svg></i></div>
+              <div class="geraet">
+                <div class="geraet-schirm fb">
+                  <div class="fb-kopf"><span class="fb-logo"><svg><use href="#i-facebook"/></svg></span><span class="fb-rund"><svg><use href="#i-suche"/></svg></span><span class="fb-rund"><svg><use href="#i-nachricht"/></svg></span></div>
+                  <div class="fb-feed">
+                    <div class="fb-karte fb-schreiben"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span><span class="fb-feld"><span lang="de">Was machst du gerade?</span><span lang="en">What’s on your mind?</span></span></div>
+                    <div class="fb-karte fb-beitrag">
+                      <div class="fb-autor"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span><span><b>IT-Engel</b><small><svg><use href="#i-erde"/></svg></small></span><svg class="fb-mehr"><use href="#i-mehr"/></svg></div>
+                      <p>we make it himmlisch</p>
+                      <div class="fb-bild motiv motiv-feder"><i class="staub"></i></div>
+                      <div class="fb-aktionen"><span class="fb-like"><svg><use href="#i-daumen"/></svg><span lang="de">Gefällt mir</span><span lang="en">Like</span></span><span><svg><use href="#i-sprechblase"/></svg><span lang="de">Kommentieren</span><span lang="en">Comment</span></span><span><svg><use href="#i-teilen"/></svg><span lang="de">Teilen</span><span lang="en">Share</span></span></div>
+                      <i class="fb-blase"><svg><use href="#i-daumen"/></svg></i>
+                    </div>
+                    <div class="fb-karte fb-beitrag fb-zweiter">
+                      <div class="fb-autor"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span><span><b>IT-Engel</b><small><svg><use href="#i-erde"/></svg></small></span><svg class="fb-mehr"><use href="#i-mehr"/></svg></div>
+                      <div class="fb-bild motiv motiv-halo"></div>
+                    </div>
+                  </div>
+                </div>
+                <i class="geraet-insel"></i>
+              </div>
+            </div>
+          </li>
+
+          <!-- Pinterest: helle Pinnwand mit versetzten Spalten, roter Knopf „Merken“ -->
+          <li class="kanal-eintrag k-pinterest" id="kanal-pinterest" data-kanal="pinterest">
+            <a class="kanal" href="https://www.pinterest.com/itengel_official/">
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-p"/></svg>
+              <span class="kanal-text"><strong>Pinterest</strong><span class="kanal-name">itengel_official</span><span class="kanal-zeile"><span lang="de">Kurzvideos als Video-Pins.</span><span class="trenner"> / </span><span lang="en">Short videos as video pins.</span></span></span>
+              <span class="kanal-los"><span lang="de">Zum Kanal</span><span lang="en">Open channel</span><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg></span>
+              <svg class="icon pfeil" aria-hidden="true" focusable="false"><use href="#i-pfeil"/></svg>
+            </a>
+            <div class="kanal-szene" aria-hidden="true">
+              <div class="szene-grund"><div class="pin-wand"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+              <div class="pin-frei"><i class="motiv motiv-gold f1"></i><i class="motiv motiv-halo f2"></i><i class="motiv motiv-boegen f3"></i></div>
+              <div class="geraet">
+                <div class="geraet-schirm pin">
+                  <div class="pin-suche"><svg><use href="#i-suche"/></svg><span lang="de">Suchen</span><span lang="en">Search</span></div>
+                  <div class="pin-profil"><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span><span><b>IT-Engel</b><small>@itengel_official</small></span></div>
+                  <div class="pin-raster">
+                    <div class="pin-spalte"><i class="pin-kachel motiv motiv-feder h-a"><span class="pin-merken"><span class="pm-1"><span lang="de">Merken</span><span lang="en">Save</span></span><span class="pm-2"><span lang="de">Gemerkt</span><span lang="en">Saved</span></span></span></i><i class="pin-kachel motiv motiv-boegen h-b"></i><i class="pin-kachel motiv motiv-gold h-c"></i><i class="pin-kachel motiv motiv-staub h-a"></i></div>
+                    <div class="pin-spalte"><i class="pin-kachel motiv motiv-halo h-c"></i><i class="pin-kachel motiv motiv-gold h-a"></i><i class="pin-kachel motiv motiv-feder h-b"></i><i class="pin-kachel motiv motiv-halo h-a"></i></div>
+                  </div>
+                  <div class="pin-nav"><svg><use href="#i-haus"/></svg><svg><use href="#i-suche"/></svg><svg><use href="#i-plus"/></svg><svg><use href="#i-nachricht"/></svg><span class="avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span></div>
+                </div>
+                <i class="geraet-insel"></i>
+              </div>
+            </div>
+          </li>
+        </ul>
+
+        <p class="kanal-hinweis"><span lang="de">Die Plattform-Ansichten sind vereinfachte Nachbildungen; die Namen und Marken gehören ihren Inhabern.</span><span class="trenner"> / </span><span lang="en">The platform views are simplified recreations; the names and trademarks belong to their respective owners.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="de" class="sprachblock" lang="de" aria-labelledby="de-worum">
+    <div class="wrap wrap--breit">
+      <p class="sprachkopf"><strong>Deutsch</strong> · <a href="#en" hreflang="en" lang="en">English version</a></p>
+
+      <h2 id="de-worum" class="titel">Worum es geht</h2>
+      <p class="intro" data-reveal>IT-Engel ist der Name der Kanäle des Betreibers dieser Website. Hier steht, wie die Videos entstehen, auf welchen Konten sie erscheinen und wie der Betreiber erreichbar ist. Angaben zum Betreiber stehen im <a href="impressum.html">Impressum</a>.</p>
+
+      <h2 class="titel">Veröffentlichung</h2>
+      <div class="panel" data-reveal>
+        <p>Auf YouTube, Instagram, Facebook und Pinterest veröffentlicht der Betreiber mit einem eigenen Werkzeug. Es arbeitet ausschließlich mit den eigenen Konten des Betreibers und wird nicht für andere Personen angeboten: Es gibt keine Registrierung und keine Konten für Dritte. Der Betreiber bedient das Werkzeug über einen Telegram-Bot und gibt jede Veröffentlichung vorher frei.</p>
+        <p>Das Werkzeug greift nur dann auf ein Konto zu, wenn der Betreiber es bei der jeweiligen Plattform autorisiert hat. Welche Verbindungen aktiv sind, hängt davon ab, ob die Plattform die Anwendung freigegeben hat. Einzelheiten stehen in den <a href="terms.html">Nutzungsbedingungen</a> und in der <a href="privacy.html">Datenschutzerklärung der Anwendung</a>.</p>
+        <p>Auf TikTok lädt der Betreiber die Videos selbst hoch; dort ist das Werkzeug nicht verbunden.</p>
+      </div>
+
+      <h2 class="titel">Daten in Kürze</h2>
+      <ul class="fakten" data-reveal>
+        <li>Das Werkzeug verarbeitet nur Konto-Kennungen, Zugriffs-Token, Inhalte (Videos, Titel, Beschreibungen) und Kennzahlen der eigenen Konten des Betreibers.</li>
+        <li>Die Daten werden nicht verkauft und nicht zu Werbezwecken weitergegeben.</li>
+        <li>Die Speicherung erfolgt lokal beim Betreiber oder auf einem vom Betreiber selbst verwalteten Server. Auf Anfrage werden Daten gelöscht.</li>
+        <li>Diese Website setzt keine Cookies, verwendet kein Tracking und lädt keine Schriften oder Skripte von fremden Servern.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="en" class="sprachblock" lang="en" aria-labelledby="en-about">
+    <div class="wrap wrap--breit">
+      <p class="sprachkopf"><strong>English version</strong> · <a href="#de" hreflang="de" lang="de">Deutsche Fassung</a></p>
+
+      <h2 id="en-about" class="titel">What this is about</h2>
+      <p class="intro" data-reveal>IT-Engel is the name of the channels of the operator of this website. This site explains how the videos are made, on which accounts they appear and how the operator can be reached. Information about the operator is in the <a href="impressum.html">Impressum</a> (legal notice).</p>
+
+      <h2 class="titel">Publishing</h2>
+      <div class="panel" data-reveal>
+        <p>On YouTube, Instagram, Facebook and Pinterest the operator publishes with a tool of their own. It works only with the operator’s own accounts and is not offered to other people: there is no registration and there are no accounts for third parties. The operator controls the tool through a Telegram bot and approves every publication beforehand.</p>
+        <p>The tool accesses an account only if the operator has authorized it on the respective platform. Which connections are active depends on whether the platform has approved the application. Details are in the <a href="terms.html">Terms of Service</a> and the <a href="privacy.html">Privacy Policy</a>.</p>
+        <p>On TikTok the operator uploads the videos personally; the tool is not connected there.</p>
+      </div>
+
+      <h2 class="titel">Data in brief</h2>
+      <ul class="fakten" data-reveal>
+        <li>The tool processes only account identifiers, access tokens, content (videos, titles, descriptions) and metrics of the operator’s own accounts.</li>
+        <li>Data is not sold and not passed on for advertising purposes.</li>
+        <li>Data is stored locally with the operator or on a server the operator manages. It is deleted on request.</li>
+        <li>This website sets no cookies, uses no tracking and loads no fonts or scripts from other servers.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="kontakt" class="abschnitt" aria-labelledby="kontakt-titel">
+    <div class="wrap wrap--breit">
+      <header class="abschnitt-kopf">
+        <div>
+          <h2 id="kontakt-titel"><span lang="de">Kontakt</span><span lang="en">Contact</span></h2>
+        </div>
+      </header>
+      <div class="kontakt-grid">
+        <div data-reveal>
+          <h3><span lang="de">E-Mail</span><span class="trenner"> · </span><span lang="en">Email</span></h3>
+          <p><mark class="platzhalter">[PLATZHALTER: Kontakt-E-Mail-Adresse]</mark></p>
+          <p class="klein"><span lang="de">Angaben zum Betreiber stehen im <a href="impressum.html">Impressum</a>.</span> <span lang="en">Information about the operator is in the <a href="impressum.html">Impressum</a> (legal notice).</span></p>
+        </div>
+        <div data-reveal>
+          <h3><span lang="de">Rechtliches</span><span class="trenner"> · </span><span lang="en">Legal</span></h3>
+          <ul class="chips">
+            <li><a href="terms.html"><span lang="en">Terms of Service</span><span class="trenner"> · </span><span lang="de">Nutzungsbedingungen</span></a></li>
+            <li><a href="privacy.html"><span lang="en">Privacy Policy</span><span class="trenner"> · </span><span lang="de">Datenschutz (Anwendung)</span></a></li>
+            <li><a href="impressum.html"><span lang="de">Impressum</span><span class="trenner"> · </span><span lang="en">Legal notice</span></a></li>
+            <li><a href="datenschutz.html" hreflang="de"><span lang="de">Datenschutzerklärung (Website)</span><span class="trenner"> / </span><span lang="en">Website privacy notice (German)</span></a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Rechtliches / Legal" data-label-de="Rechtliches" data-label-en="Legal">
+      <ul>
+        <li><a href="terms.html"><span lang="en">Terms of Service</span><span class="trenner"> / </span><span lang="de">Nutzungsbedingungen</span></a></li>
+        <li><a href="privacy.html"><span lang="en">Privacy Policy</span><span class="trenner"> / </span><span lang="de">Datenschutz (Anwendung)</span></a></li>
+        <li><a href="impressum.html"><span lang="de">Impressum</span><span class="trenner"> / </span><span lang="en">Legal notice</span></a></li>
+        <li><a href="datenschutz.html" hreflang="de"><span lang="de">Datenschutzerklärung (Website)</span><span class="trenner"> / </span><span lang="en">Website privacy notice (German)</span></a></li>
+      </ul>
+    </nav>
+    <p>IT-Engel · thermup.de</p>
+    <p class="material"><span lang="de">3D-Film: eigene Modelle, im Browser gerendert mit three.js (MIT-Lizenz). Schrift: Raleway (SIL Open Font License). <a href="assets/CREDITS.txt">Alle Nachweise</a></span> <span lang="en">3D film: own models, rendered in the browser with three.js (MIT License). Font: Raleway (SIL Open Font License). <a href="assets/CREDITS.txt" hreflang="de">All credits</a></span></p>
+  </div>
+</footer>
 </body>
 </html>

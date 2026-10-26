@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de" data-sprachen="de en" data-titel-de="Rückkehr der Anmeldung – IT-Engel" data-titel-en="Login redirect – IT-Engel">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>Rückkehr der Anmeldung · Login redirect – IT-Engel</title>
+<link rel="stylesheet" href="style.css?v=6">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip-link" href="#inhalt"><span lang="de">Zum Inhalt springen</span><span class="trenner"> / </span><span lang="en">Skip to content</span></a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><picture><source media="(prefers-color-scheme: dark)" srcset="logo-kopf-hell.png"><img class="logo" src="logo-kopf.png" width="772" height="658" alt="IT-Engel"></picture></a>
+    <div class="sprachwahl" role="group" aria-label="Sprache / Language" hidden>
+      <button type="button" value="de" lang="de" aria-pressed="false">Deutsch</button>
+      <button type="button" value="en" lang="en" aria-pressed="false">English</button>
+    </div>
+  </div>
+</header>
+
+<main id="inhalt" class="wrap seite">
+  <h1 class="zweisprachig"><span lang="de">Rückkehr der Anmeldung</span> <span class="trenner" aria-hidden="true">·</span> <span lang="en">Login redirect</span></h1>
+  <p class="lead" lang="de">Rückkehradresse für die Anmeldung des Betreibers bei einer Plattform, zum Beispiel Instagram, Facebook, Pinterest oder Google.</p>
+  <p class="lead" lang="en">Redirect page for the operator’s login at a platform, for example Instagram, Facebook, Pinterest or Google.</p>
+
+  <div class="hinweis hinweis-warnung" role="note">
+    <p lang="de"><strong>Code nicht weitergeben.</strong> Der Code gehört zur Anmeldung des Betreibers. Er darf nicht gepostet, nicht per Chat oder E-Mail verschickt und nicht in Screenshots gezeigt werden. Er wird nur einmal in das Anmeldeskript auf dem eigenen Rechner eingefügt.</p>
+    <p lang="en"><strong>Do not share the code.</strong> The code belongs to the operator’s login. It must not be posted, sent by chat or email, or shown in screenshots. It is pasted only once into the login script on the operator’s own computer.</p>
+  </div>
+
+  <section aria-labelledby="angaben">
+    <h2 id="angaben" class="zweisprachig"><span lang="de">Angaben aus der Adresse</span> <span class="trenner" aria-hidden="true">·</span> <span lang="en">Values from the address</span></h2>
+
+    <div id="meldung-code" hidden>
+      <p lang="de">Die Plattform hat einen Code übergeben. Den Code kopieren, einmalig in das Anmeldeskript einfügen und dieses Fenster danach schließen. Autorisierungscodes sind in der Regel nur kurz gültig und nur einmal verwendbar.</p>
+      <p lang="en">The platform returned a code. Copy it, paste it once into the login script, and close this window afterwards. Authorization codes are usually valid only briefly and can be used only once.</p>
+    </div>
+    <div id="meldung-fehler" hidden>
+      <p lang="de">Die Plattform hat die Anmeldung mit einer Fehlermeldung beendet. Es wurde kein Code übergeben. Die Anmeldung im Skript neu starten.</p>
+      <p lang="en">The platform ended the login with an error. No code was returned. Restart the login in the script.</p>
+    </div>
+    <div id="meldung-leer" hidden>
+      <p lang="de">Es wurde kein Code übergeben. Die Plattform ruft diese Seite nach der Anmeldung auf; ohne Anmeldung gibt es hier nichts anzuzeigen.</p>
+      <p lang="en">No code was passed. The platform opens this page after the login; without a login there is nothing to show here.</p>
+    </div>
+
+    <dl class="werte">
+      <div id="zeile-code" hidden>
+        <dt>code</dt>
+        <dd>
+          <code class="wert" id="wert-code"></code>
+          <button type="button" class="knopf" id="knopf-kopieren"><span lang="de">Code kopieren</span><span class="trenner"> / </span><span lang="en">Copy code</span></button>
+          <p role="status" id="kopier-status"></p>
+        </dd>
+      </div>
+      <div id="zeile-state" hidden>
+        <dt>state</dt>
+        <dd>
+          <code class="wert" id="wert-state"></code>
+          <p class="meta" lang="de">Der Wert muss zu dem passen, den das Anmeldeskript beim Start gesendet hat.</p>
+          <p class="meta" lang="en">The value must match the one the login script sent when it started.</p>
+        </dd>
+      </div>
+      <div id="zeile-scopes" hidden>
+        <dt>scope</dt>
+        <dd><code class="wert" id="wert-scopes"></code></dd>
+      </div>
+      <div id="zeile-error" hidden>
+        <dt>error</dt>
+        <dd><code class="wert" id="wert-error"></code></dd>
+      </div>
+      <div id="zeile-error_description" hidden>
+        <dt>error_description</dt>
+        <dd><code class="wert" id="wert-error_description"></code></dd>
+      </div>
+      <div id="zeile-error_reason" hidden>
+        <dt>error_reason</dt>
+        <dd><code class="wert" id="wert-error_reason"></code></dd>
+      </div>
+    </dl>
+
+    <noscript>
+      <p class="hinweis hinweis-warnung" lang="de">Ohne JavaScript kann diese Seite den Code nicht anzeigen. Er steht in der Adresszeile des Browsers hinter „code=“ bis zum nächsten „&amp;“.</p>
+      <p class="hinweis hinweis-warnung" lang="en">Without JavaScript this page cannot show the code. It is in the browser’s address bar after “code=” up to the next “&amp;”.</p>
+    </noscript>
+  </section>
+
+  <section aria-labelledby="funktion">
+    <h2 id="funktion" class="zweisprachig"><span lang="de">Was diese Seite tut</span> <span class="trenner" aria-hidden="true">·</span> <span lang="en">What this page does</span></h2>
+    <ul lang="de">
+      <li>Sie liest die Angaben aus der Adresszeile und zeigt sie nur in diesem Browserfenster an.</li>
+      <li>Sie speichert nichts, sendet nichts und lädt nichts nach. Das einzige Skript ist <code>callback.js</code> auf derselben Domain.</li>
+      <li>Sie entfernt die Angaben nach dem Anzeigen aus der Adresszeile. Ein Neuladen zeigt sie nicht erneut an; dann die Anmeldung neu starten.</li>
+    </ul>
+    <ul lang="en">
+      <li>It reads the values from the address bar and shows them only in this browser window.</li>
+      <li>It stores nothing, sends nothing and loads nothing. The only script is <code>callback.js</code> on the same domain.</li>
+      <li>After showing the values it removes them from the address bar. Reloading does not show them again; restart the login in that case.</li>
+    </ul>
+  </section>
+
+  <script src="callback.js?v=6"></script>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Rechtliches / Legal" data-label-de="Rechtliches" data-label-en="Legal">
+      <ul>
+        <li><a href="terms.html"><span lang="en">Terms of Service</span><span class="trenner"> / </span><span lang="de">Nutzungsbedingungen</span></a></li>
+        <li><a href="privacy.html"><span lang="en">Privacy Policy</span><span class="trenner"> / </span><span lang="de">Datenschutz (Anwendung)</span></a></li>
+        <li><a href="impressum.html"><span lang="de">Impressum</span><span class="trenner"> / </span><span lang="en">Legal notice</span></a></li>
+        <li><a href="datenschutz.html" hreflang="de"><span lang="de">Datenschutzerklärung (Website)</span><span class="trenner"> / </span><span lang="en">Website privacy notice (German)</span></a></li>
+      </ul>
+    </nav>
+    <p>IT-Engel · thermup.de</p>
+    <p class="material"><span lang="de">3D-Film: eigene Modelle, im Browser gerendert mit three.js (MIT-Lizenz). Schrift: Raleway (SIL Open Font License). <a href="assets/CREDITS.txt">Alle Nachweise</a></span> <span lang="en">3D film: own models, rendered in the browser with three.js (MIT License). Font: Raleway (SIL Open Font License). <a href="assets/CREDITS.txt" hreflang="de">All credits</a></span></p>
+  </div>
+</footer>
+</body>
+</html>

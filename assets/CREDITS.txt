@@ -1,0 +1,52 @@
+Medien, Programme und Schriften auf thermup.de (IT-Engel): Nachweise
+Stand: 25.10.2026
+
+3D-FILM AUF DER STARTSEITE
+
+Der Film auf der Startseite wird im Browser in Echtzeit gerendert. Alle Modelle
+(Roboter, kleine Helfer-Roboter, Maschine mit Schichten und Säule, Fernrohr mit
+Stativ, Schreibmaschine, Mikrofon, Lautsprecher, Bücher und Regal, Pult mit
+Freigabeknopf und Fingerabdruckfeld, Kiste mit Etagen, Telefone, Sendemast,
+Laternen, Lichtflügel) und alle Oberflächen (Rauheit, Maserung, Bürstung,
+Anzeigen) hat der Betreiber selbst als Programmcode erstellt (film3d/). Es
+werden keine fremden Modelle, Bilder oder Videos geladen.
+
+assets/img/hero.webp ist ein Einzelbild aus diesem Film.
+
+three.js, Version 0.170.0
+    Copyright © 2010-2024 three.js authors, MIT-Lizenz
+    Lizenztext: vendor/three/LICENSE
+    Dateien: vendor/three/ (Kern unverändert; in den Zusatzmodulen ist nur die
+    Modulangabe „three“ durch den relativen Pfad zum Kern ersetzt)
+    Quelle: https://threejs.org, npm-Paket three@0.170.0 über jsdelivr; jede Datei
+    am 25.10.2026 gegen die SHA-256-Liste des Pakets geprüft.
+
+KANÄLE
+
+Die Plattform-Szenen im Abschnitt „Kanäle“ (TikTok, YouTube, Instagram,
+Facebook, Pinterest) sind eigene, vereinfachte Nachbildungen der Oberflächen
+(Farben und Aufbau), gebaut aus HTML und CSS mit eigenen Symbolen. Es werden
+keine Logos, Grafiken oder Schriften der Plattformen geladen. Die Namen und
+Marken gehören ihren Inhabern. Die Motive darin sind eigene Ableitungen:
+assets/img/feder-hell.png und feder-dunkel.png (die Feder aus dem Logo) und
+assets/img/boegen.png (Ring in den sechs Farben der Stationen).
+
+SCHRIFT (SIL Open Font License, Version 1.1)
+
+assets/fonts/Raleway-latin.woff2 und Raleway-italic-latin.woff2
+    Raleway, Copyright 2010 The Raleway Project Authors (impallari@gmail.com),
+    with Reserved Font Name "Raleway"
+    Lizenz: assets/fonts/OFL-Raleway.txt
+
+Die Schriftdateien (variable Fassung, Zeichenvorrat „latin“) stammen
+unverändert aus der Auslieferung von Google Fonts (abgerufen am 25.10.2026)
+und werden hier selbst gehostet; der Lizenztext stammt aus
+github.com/google/fonts. Beim Aufruf der Seite werden keine Anfragen an
+Google gestellt.
+
+LOGO
+
+logo-kopf.png ist die Grafik von IT-Engel (Feder und Schriftzug, ohne den
+Slogan) in Marineblau auf transparentem Grund; logo-kopf-hell.png ist dieselbe
+Grafik, nur in Creme umgefärbt, damit sie auf dunklen Flächen lesbar bleibt.
+Beide stehen im Kopf der Seiten.
