@@ -509,6 +509,31 @@ html:not(.js) .site-header {
 html:not([data-sprache]) .hero-lead[lang="en"] { color: var(--ink-muted); font-size: 1.02rem; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: .8rem; margin: 2rem 0 0; }
 
+/* „Film trotzdem starten“ (film.js): unauffällig unter den Knöpfen des Hero, nur wenn der Film aus ist,
+   das Gerät ihn aber zeigen könnte; daneben kurz der Grund (in der gewählten Sprache) */
+.film-trotzdem { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem 1rem; margin: 1.3rem 0 0; color: var(--ink-muted); font-size: .88rem; }
+.knopf-leise {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .6rem 1.05rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: .88rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  cursor: pointer;
+  transition: border-color .25s var(--ease), color .25s var(--ease);
+}
+.knopf-leise:hover { border-color: var(--gold); color: var(--gold); }
+.knopf-leise .icon { width: .9rem; height: .9rem; }
+.film-trotzdem-grund > span { display: none; }
+.film-trotzdem[data-grund="langsam"] .grund-langsam,
+.film-trotzdem[data-grund="ruhig"] .grund-ruhig { display: inline; }
+
 /* ------------------------------------------------- Film: Kamerafahrt (film.js) */
 
 /* Zusatz. Ohne Skript, bei „Bewegung reduzieren“ und nach Pause ist .film nur ein
@@ -653,6 +678,9 @@ html.film-an .film-3d {
 }
 html.film-bereit .film-3d { opacity: 1; }
 html.film-bereit .film-anker { opacity: 0; }
+/* Vorlauf (das 3D-Bild wird noch vorbereitet, haupt.js): Texte und Skala laufen schon mit, das Standbild des
+   Hero tritt außerhalb des Hero zurück */
+html.film-an:not(.film-bereit) .film-anker { opacity: calc(1 - var(--sicht, 0) * .65); }
 html.film-an .film-leinwand {
   display: block;
   position: absolute;
@@ -2008,7 +2036,7 @@ html.ruhe [data-reveal].is-armed { opacity: 1; translate: 0 0; }
 /* ------------------------------------------------------------------- Druck */
 
 @media print {
-  .site-header, .pause, .nach-oben, .film-kapitel, .film-start, .film-skip, .himmel { display: none !important; }
+  .site-header, .pause, .nach-oben, .film-kapitel, .film-start, .film-skip, .film-trotzdem, .himmel { display: none !important; }
   body { background: #fff; color: #000; }
   a { color: #000; }
 }

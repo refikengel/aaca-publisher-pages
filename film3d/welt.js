@@ -3,7 +3,9 @@
 
   Gerendert wird nur der Kreis der Skala (ein quadratisches Canvas, per CSS rund beschnitten).
   Qualitätsstufen: 3 = weiche Schatten 2048, vierfache Kantenglättung; 2 = Schatten 1024;
-  1 = Schatten 512, Glühen in halber Auflösung, Pixeldichte 1.
+  1 = Schatten 512, Glühen in halber Auflösung, Pixeldichte 1; 0 = leicht: keine Schatten, kein
+  Glühen, kein Korn, keine Kantenglättung, kein schwebender Staub, Pixeldichte 0,6 (das Bild wird
+  vergrößert angezeigt). Stufe 0 ist für schwache Geräte und Grafik ohne Beschleunigung gedacht.
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoomEnvironment } from "../vendor/three/addons/environments/RoomEnvironment.js";
@@ -32,17 +34,22 @@ const KornShader = {
 };
 
 export class Welt {
-  constructor(canvas, stufe) {
+  // stufe: Qualitätsstufe 0 bis 3; softwareErlaubt: auch ohne Grafikbeschleunigung starten
+  // (der Browser meldet sonst einen „major performance caveat“ und legt keinen Kontext an)
+  constructor(canvas, stufe, softwareErlaubt) {
     this.canvas = canvas;
+    stufe = stufe === undefined ? 3 : stufe;
     var r = this.renderer = new THREE.WebGLRenderer({
       canvas: canvas, antialias: false, alpha: false, stencil: false, depth: true,
-      powerPreference: "high-performance", failIfMajorPerformanceCaveat: true
+      powerPreference: "high-performance", failIfMajorPerformanceCaveat: !softwareErlaubt
     });
     if (!r.capabilities.isWebGL2) { throw new Error("kein WebGL2"); }
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.0;
-    r.shadowMap.enabled = true;
+    // startet der Film gleich leicht, werden die Shader ohne Schatten übersetzt (spart auch dort Rechenzeit)
+    this.mitSchatten = stufe > 0;
+    r.shadowMap.enabled = this.mitSchatten;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     r.localClippingEnabled = true;
     this.halbFloat = r.extensions.has("EXT_color_buffer_float") || r.extensions.has("EXT_color_buffer_half_float");
@@ -65,7 +72,7 @@ export class Welt {
     // Studiolicht: warmes Hauptlicht mit Schatten, kühles Gegenlicht, farbiges Akzentlicht der Station
     var haupt = this.hauptLicht = new THREE.DirectionalLight(0xfff0dc, 2.25);
     haupt.position.set(-3.6, 6.4, 4.8);
-    haupt.castShadow = true;
+    haupt.castShadow = this.mitSchatten;
     var sc = haupt.shadow.camera;
     sc.left = -3.2; sc.right = 3.2; sc.top = 3.6; sc.bottom = -2.4; sc.near = 1; sc.far = 18;
     haupt.shadow.bias = -0.00035;
@@ -83,10 +90,10 @@ export class Welt {
 
     this.staubBauen();
     this.schattenBauen();
-    this.stufe = 0;
+    this.stufe = -1;
     this.pixel = 1;
     this.css = 1;
-    this.setzeStufe(stufe || 3);
+    this.setzeStufe(stufe);
   }
 
   hintergrund() {
@@ -178,15 +185,67 @@ export class Welt {
   }
 
   setzeStufe(n) {
-    n = Math.max(1, Math.min(3, n));
+    n = Math.max(0, Math.min(3, n));
     if (n === this.stufe) { return; }
     this.stufe = n;
     var h = this.hauptLicht;
-    var gross = n === 3 ? 2048 : (n === 2 ? 1024 : 512);
-    h.shadow.mapSize.set(gross, gross);
-    if (h.shadow.map) { h.shadow.map.dispose(); h.shadow.map = null; }
+    if (n === 0) {
+      // keine Schatten mehr rechnen: die Schattenkarte einmal leeren (weiß = nichts im Schatten) und nicht
+      // mehr erneuern. Die Shader bleiben dieselben; nichts muss neu übersetzt werden (sonst ein Ruckler).
+      h.shadow.autoUpdate = false;
+      h.shadow.needsUpdate = false;
+      this.schattenLeeren();
+    } else if (this.mitSchatten) {
+      h.shadow.autoUpdate = true;
+      var gross = n === 3 ? 2048 : (n === 2 ? 1024 : 512);
+      h.shadow.mapSize.set(gross, gross);
+      if (h.shadow.map) { h.shadow.map.dispose(); h.shadow.map = null; }
+    }
+    this.staub.visible = n > 0;
     this.passesBauen();
     if (this.css > 1) { this.groesse(this.css, this.dprWunsch || 1); }
+  }
+
+  // Shader vorab übersetzen, ohne zu blockieren (compileAsync). faelle: [{ ebenen, wurzeln }]. three.js (r170)
+  // übersetzt dabei mit dem Schnittebenen-Zustand des zuletzt gezeichneten Stoffs, nicht mit dem des jeweiligen
+  // Stoffs; im Film haben fast alle Stoffe eine Schnittebene (den Scan), die Maschine keine, das Skript-Blatt
+  // zwei. Deshalb vor jedem Fall ein winziges Bild mit einem Stoff mit genau so vielen Ebenen. Übersetzt wird
+  // für das Zwischenbild der Nachbearbeitung (linear, Tonwerte erst am Ende), in das auch gezeichnet wird. So
+  // muss beim ersten Bild einer Szene kaum noch etwas nacheinander und blockierend nachübersetzt werden.
+  uebersetzen(faelle, kamera) {
+    var r = this.renderer, ziel = r.getRenderTarget(), zusagen = [], i, j;
+    var klein = new THREE.WebGLRenderTarget(1, 1), probe = new THREE.Scene();
+    var flaeche = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+    flaeche.frustumCulled = false;
+    probe.add(flaeche);
+    try {
+      for (i = 0; i < faelle.length; i++) {
+        flaeche.material.clippingPlanes = faelle[i].ebenen.length ? faelle[i].ebenen : null;
+        flaeche.material.needsUpdate = true;
+        r.setRenderTarget(klein);
+        r.render(probe, kamera);
+        r.setRenderTarget(this.composer.readBuffer);
+        for (j = 0; j < faelle[i].wurzeln.length; j++) { zusagen.push(r.compileAsync(faelle[i].wurzeln[j], kamera, this.szene)); }
+      }
+    } finally {
+      r.setRenderTarget(ziel);
+    }
+    return Promise.all(zusagen).then(function () {
+      klein.dispose();
+      flaeche.geometry.dispose();
+      flaeche.material.dispose();
+    });
+  }
+
+  schattenLeeren() {
+    var karte = this.hauptLicht.shadow.map;
+    if (!karte) { return; }
+    var r = this.renderer, farbe = r.getClearColor(new THREE.Color()), alpha = r.getClearAlpha(), vorher = r.getRenderTarget();
+    r.setRenderTarget(karte);
+    r.setClearColor(0xffffff, 1);
+    r.clear(true, true, false);
+    r.setRenderTarget(vorher);
+    r.setClearColor(farbe, alpha);
   }
 
   passesBauen() {
@@ -194,24 +253,32 @@ export class Welt {
     var r = this.renderer;
     var ziel = new THREE.WebGLRenderTarget(4, 4, {
       type: this.halbFloat ? THREE.HalfFloatType : THREE.UnsignedByteType,
-      samples: this.stufe >= 2 ? 4 : 2
+      samples: this.stufe >= 2 ? 4 : (this.stufe === 1 ? 2 : 0)
     });
     var c = this.composer = new EffectComposer(r, ziel);
     c.addPass(new RenderPass(this.szene, this.kamera));
-    // nur echtes Leuchten (Augen, Heiligenschein, Scanstrahl) glüht, helle Flächen nicht
-    // dezent: geringe Stärke, enger Radius, hohe Schwelle (das Glühen soll keine Details überstrahlen)
-    var bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.18, 0.22, 1.6);
-    c.addPass(bloom);
+    this.bloom = null;
+    this.korn = null;
+    // Stufe 0: nur Bild und Ausgabe (Tonwerte, Farbraum). Der Weg über das Renderziel bleibt, damit die
+    // Shader dieselben bleiben wie auf den höheren Stufen (kein Neuübersetzen beim Wechsel).
+    if (this.stufe > 0) {
+      // nur echtes Leuchten (Augen, Heiligenschein, Scanstrahl) glüht, helle Flächen nicht
+      // dezent: geringe Stärke, enger Radius, hohe Schwelle (das Glühen soll keine Details überstrahlen)
+      var bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.18, 0.22, 1.6);
+      c.addPass(bloom);
+    }
     c.addPass(new OutputPass());
-    var korn = this.korn = new ShaderPass(KornShader);
-    c.addPass(korn);
+    if (this.stufe > 0) {
+      var korn = this.korn = new ShaderPass(KornShader);
+      c.addPass(korn);
+    }
   }
 
   // css = Kantenlänge des Kreises in CSS-Pixeln, dpr = gewünschte Pixeldichte
   groesse(css, dpr) {
     this.css = css;
     this.dprWunsch = dpr;
-    var d = this.stufe === 1 ? Math.min(dpr, 1) : Math.min(dpr, 2);
+    var d = this.stufe === 0 ? Math.min(dpr, 1) * 0.6 : (this.stufe === 1 ? Math.min(dpr, 1) : Math.min(dpr, 2));
     // nie mehr als etwa 2,6 Millionen Pixel rendern
     while (css * css * d * d > 2600000 && d > 1) { d -= 0.25; }
     this.pixel = d;
@@ -220,7 +287,7 @@ export class Welt {
     r.setSize(css, css, false);
     this.composer.setPixelRatio(d);
     this.composer.setSize(css, css);
-    if (this.stufe === 1) { this.bloom.resolution.set(css * d * 0.5, css * d * 0.5); }
+    if (this.stufe === 1 && this.bloom) { this.bloom.resolution.set(css * d * 0.5, css * d * 0.5); }
     this.kamera.aspect = 1;
     this.kamera.updateProjectionMatrix();
     this.staubStoff.uniforms.uPixel.value = d * css / 600;
@@ -228,7 +295,7 @@ export class Welt {
 
   render(zeit) {
     this.staubStoff.uniforms.uZeit.value = zeit;
-    this.korn.uniforms.uZeit.value = zeit;
+    if (this.korn) { this.korn.uniforms.uZeit.value = zeit; }
     this.composer.render();
   }
 

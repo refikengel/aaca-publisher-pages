@@ -42,9 +42,15 @@ export class Skala {
   zeichne(Z, zeit, P) {
     var ctx = this.ctx, lay = this.lay, R = lay.r, x = lay.x, y = lay.y, s = Z.s, i, k;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.W, this.H);
+    if (this.leicht) {
+      // leichte Stufe (langsame Geräte): kein Goldstaub, nur das Feld um den Kreis neu zeichnen
+      var rand = R * 1.2 + 6;
+      ctx.clearRect(x - rand, y - rand, rand * 2, rand * 2);
+    } else {
+      ctx.clearRect(0, 0, this.W, this.H);
+    }
     // Goldstaub außerhalb des Kreises
-    for (i = 0; i < this.staub.length; i++) {
+    for (i = 0; i < (this.leicht ? 0 : this.staub.length); i++) {
       var p = this.staub[i], tiefe = p[2];
       var sx = ((p[0] + zeit * 0.004 * tiefe) % 1) * this.W;
       var sy = (((p[1] - s * 0.05 * tiefe) % 1) + 1) % 1 * this.H;

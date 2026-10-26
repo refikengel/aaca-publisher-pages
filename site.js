@@ -164,8 +164,11 @@
   function initPause() {
     var knopf = document.querySelector(".pause");
     if (!knopf) { return; }
-    function anzeigen() { knopf.hidden = !!(mqReduce && mqReduce.matches); }
+    // bei „Bewegung reduzieren“ bewegt sich nichts, die Taste entfällt; hat der Besucher den Film trotzdem
+    // gestartet („Film trotzdem starten“, film.js), braucht er sie zum Anhalten
+    function anzeigen() { knopf.hidden = !!(mqReduce && mqReduce.matches) && !root.classList.contains("film-erzwungen"); }
     anzeigen();
+    document.addEventListener("film-erzwungen", anzeigen);
     knopf.addEventListener("click", function () {
       var an = root.classList.toggle("ruhe");
       knopf.setAttribute("aria-pressed", an ? "true" : "false");

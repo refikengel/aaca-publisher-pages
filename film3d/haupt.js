@@ -11,15 +11,23 @@
   Bildlaufleiste und Touch bleiben unverändert. Alles hier ist Zusatz: Ohne Skript, bei „Bewegung
   reduzieren“, nach der Pause-Taste und auf Geräten ohne WebGL 2 bleibt die Seite eine normale,
   vollständig lesbare Seite. Es wird nichts gespeichert, nichts gesendet und nichts nachgeladen.
+
+  Langsame Geräte: Der Film wird schrittweise leichter (Stufe 3 bis 0, siehe welt.js), statt sich
+  abzuschalten. Ohne Grafikbeschleunigung startet er gleich auf Stufe 0. Abgeschaltet wird wegen der
+  Bildrate nur, wenn auch Stufe 0 deutlich zu langsam ist; dann bietet film.js „Film trotzdem
+  starten“ an. Nach einem Klick darauf (erzwingen) läuft der Film auf Stufe 0 und schaltet sich
+  nicht mehr von selbst ab, nur für diesen Besuch.
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
-import { Welt } from "./welt.js";
+// geänderte Module mit Versionsangabe (wie haupt.js in film.js): nach einer Aktualisierung trifft so kein
+// zwischengespeichertes altes Modul auf das neue haupt.js
+import { Welt } from "./welt.js?v=8";
 import { grundstoffe, scan, scanSetzen } from "./stoff.js";
 import { Roboter } from "./roboter.js";
 import { Maschine, farbeVon, ABSTAND, FARBEN } from "./maschine.js";
 import { szeneStart, szeneThema, szeneSkript } from "./szenen.js";
 import { szeneStimme, szeneQuellen, szeneFreigabe, szeneKanaele, szeneZiel } from "./szenen2.js";
-import { Skala } from "./skala.js";
+import { Skala } from "./skala.js?v=8";
 import { klemme, seg, weich } from "./helfer.js";
 
 var root = document.documentElement;
@@ -32,13 +40,22 @@ var mqHoch = mq("(min-height: 36rem)");
 var mqHell = mq("(prefers-color-scheme: light)");
 var mqGrob = mq("(pointer: coarse)");
 
+// erzwungen: der Besucher hat „Film trotzdem starten“ geklickt; kaputt: echter Fehler (Kontextverlust,
+// Ausnahme), dann kein neuer Versuch; langsamAus: wegen zu niedriger Bildrate abgeschaltet
+var erzwungen = false, kaputt = false, langsamAus = false;
+
 function moeglich() {
   if (!window.requestAnimationFrame || typeof WebGL2RenderingContext === "undefined") { return false; }
-  if (mqReduce && mqReduce.matches) { return false; }
+  if (kaputt) { return false; }
+  if (langsamAus && !erzwungen) { return false; }
+  if (mqReduce && mqReduce.matches && !erzwungen) { return false; }
   if (mqForced && mqForced.matches) { return false; }
   if (mqHoch && !mqHoch.matches) { return false; }
   return !root.classList.contains("ruhe");
 }
+
+// aktuelle Qualitätsstufe am Dokument (zur Fehlersuche und für Tests; ohne Wirkung auf die Gestaltung)
+function stufeMelden() { if (welt) { root.setAttribute("data-film-stufe", String(welt.stufe)); } }
 
 function sanft(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
 function hexRgb(text, ersatz) {
@@ -74,7 +91,7 @@ var Z = {};
 var welt, st, rob, maschine, szenen = [], skala, kontext;
 var aktiveSzene = -1;
 var farbeTmp = new THREE.Color(), kamZiel = new THREE.Vector3();
-var qual = { summe: 0, n: 0, ueberspringen: 90, versuche: 0 };
+var qual = { summe: 0, n: 0, ueberspringen: 90, ab: 0, langsam: 0 };
 
 function setze(el, name, wert) {
   var c = el.__w || (el.__w = {});
@@ -112,7 +129,9 @@ function messen() {
   lay.x = ar.left - br.left + ar.width / 2;
   lay.y = ar.top - br.top + ar.height / 2;
   lay.r = Math.max(60, ar.width / 2);
-  skala.messen(W, H, dpr, lay);
+  // leichte Stufe: auch die Skala mit einfacher Pixeldichte und ohne Goldstaub
+  skala.leicht = welt.stufe === 0;
+  skala.messen(W, H, skala.leicht ? 1 : dpr, lay);
   welt.groesse(Math.round(ar.width), window.devicePixelRatio || 1);
   film.style.setProperty("--film-s", String(ENDE + 1));
 }
@@ -307,29 +326,61 @@ function schleife(jetzt) {
   letzte = jetzt;
   zeit += dt;
   gleiten(dt);
-  if (sichtbar && bereit) {
+  // Vorlauf (das 3D-Bild wird noch vorbereitet): Kopf, Texte und Skala folgen schon dem Scrollen
+  var vorlauf = gebaut && !bereit;
+  if (sichtbar && (bereit || vorlauf)) {
     kopfPruefen();
     var ziel = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
     var diff = ziel - sGl;
     // große Sprünge (Links, Pos1/Ende) sofort, sonst eine leichte Annäherung (das Rad ist schon geglättet)
     if (Math.abs(diff) > 2.5) { sGl = ziel; } else { sGl += diff * (1 - Math.exp(-dt / 0.06)); }
-    zeichneBild();
-    qualitaet(roh);
+    if (bereit) {
+      zeichneBild();
+      qualitaet(jetzt, roh);
+    } else {
+      zeichneVorlauf();
+    }
   }
-  if (an && ((sichtbar && bereit) || gleit.aktiv)) { raf = window.requestAnimationFrame(schleife); }
+  if (an && ((sichtbar && (bereit || vorlauf)) || gleit.aktiv)) { raf = window.requestAnimationFrame(schleife); }
 }
 
-// Qualität an das Gerät anpassen: dauerhaft unter etwa 40 Bildern pro Sekunde eine Stufe zurück;
-// reicht auch die niedrigste Stufe nicht, bleibt die Seite ohne Film
-function qualitaet(roh) {
-  if (qual.ueberspringen > 0) { qual.ueberspringen--; return; }
-  qual.summe += roh; qual.n++;
-  if (qual.n < 120) { return; }
+// im Vorlauf alles außer dem 3D-Bild; im Kreis steht bis dahin das Standbild
+function zeichneVorlauf() {
+  try {
+    zustand(sGl);
+    skala.zeichne(Z, zeit, P);
+    domAbgleich(sGl);
+  } catch (fehler) {
+    kaputt = true;
+    ausschalten("fehler");
+  }
+}
+
+// Qualität an das Gerät anpassen. Gemessen wird die mittlere Bilddauer über Zeitfenster von etwa
+// 2,5 Sekunden (mindestens 20 Bilder, spätestens nach 5 Sekunden): über 1/40 s (unter etwa 40 Bildern
+// pro Sekunde) geht es eine Stufe leichter, bis zur leichten Stufe 0. Wegen der Bildrate abgeschaltet
+// wird nur noch, wenn auch Stufe 0 zweimal hintereinander unter etwa 13 Bildern pro Sekunde bleibt, und
+// nie, wenn der Besucher den Film selbst gestartet hat (Knopf „Film trotzdem starten“). Ein Bild zählt
+// höchstens 0,5 s: ein einzelner Hänger schaltet nicht ab, ein durchgehend extrem langsames Gerät schon.
+function qualitaet(jetzt, roh) {
+  // den Anlauf nach dem Start und nach jedem Wechsel nicht mitzählen: 90 bzw. 30 Bilder, auf langsamen
+  // Geräten höchstens 1,5 bzw. 0,5 Sekunden
+  if (qual.ueberspringen > 0 && jetzt < qual.ab) { qual.ueberspringen--; return; }
+  qual.summe += klemme(roh, 0, 0.5); qual.n++;
+  if (qual.summe < 2.5 || (qual.n < 20 && qual.summe < 5)) { return; }
   var mittel = qual.summe / qual.n;
   qual.summe = 0; qual.n = 0;
-  if (mittel > 1 / 40) {
-    if (welt.stufe > 1) { welt.setzeStufe(welt.stufe - 1); messen(); qual.ueberspringen = 30; }
-    else if (++qual.versuche >= 2) { ausschalten(); }
+  if (welt.stufe > 0) {
+    if (mittel > 1 / 40) {
+      welt.setzeStufe(welt.stufe - 1); stufeMelden(); messen();
+      qual.ueberspringen = 30; qual.ab = jetzt + 500;
+    }
+    return;
+  }
+  if (mittel > 1 / 13) {
+    if (++qual.langsam >= 2 && !erzwungen) { langsamAus = true; ausschalten("langsam"); }
+  } else {
+    qual.langsam = 0;
   }
 }
 
@@ -346,18 +397,33 @@ function zeichneBild() {
     domAbgleich(sGl);
   } catch (fehler) {
     // der Film darf die Seite nie stören: bei einem Fehler zurück zur normalen Seite
-    ausschalten();
+    kaputt = true;
+    ausschalten("fehler");
   }
 }
 
 function starten() {
   if (raf || !an) { return; }
   letzte = window.performance.now();
-  if (bereit) { sGl = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE); }
+  if (gebaut) { sGl = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE); }
   raf = window.requestAnimationFrame(schleife);
 }
 function stoppen() {
   if (raf) { window.cancelAnimationFrame(raf); raf = 0; }
+}
+
+// gibt es schnelle Grafik? Ein kurzer Versuch auf einer eigenen Leinwand, die gleich wieder freigegeben
+// wird. So scheitert three.js nicht erst an der Leistungswarnung und schreibt keine Fehler in die Konsole.
+function schnelleGrafik() {
+  try {
+    var gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: true });
+    if (!gl) { return false; }
+    var frei = gl.getExtension("WEBGL_lose_context");
+    if (frei) { frei.loseContext(); }
+    return true;
+  } catch (fehler) {
+    return false;
+  }
 }
 
 function bauen() {
@@ -379,7 +445,25 @@ function bauen() {
     var c = MITTE[i];
     kapitel.push({ el: els[i], ein: [c - 0.55, c - 0.15], aus: i === 7 ? null : [c + 0.38, c + 0.72], an: false });
   }
-  welt = new Welt(leinwand3d, mqGrob && mqGrob.matches ? 2 : 3);
+  // auf Wunsch des Besuchers gleich leicht; Touch-Geräte beginnen eine Stufe tiefer; ohne schnelle Grafik
+  // (Software-Grafik, gesperrter Treiber) gleich mit der leichten Stufe
+  var schnell = schnelleGrafik();
+  var stufe = (erzwungen || !schnell) ? 0 : (mqGrob && mqGrob.matches ? 2 : 3);
+  try {
+    welt = new Welt(leinwand3d, stufe, !schnell);
+  } catch (fehler) {
+    // die Vorprüfung war zu zuversichtlich: noch ein Versuch mit Software-Grafik
+    schnell = false;
+    welt = new Welt(leinwand3d, 0, true);
+  }
+  if (!schnell) { root.setAttribute("data-film-grafik", "software"); }
+  stufeMelden();
+  // Kontextverlust (Treiber neu gestartet, Speicher knapp): ehrlich abschalten statt ein leeres Bild zu zeigen
+  leinwand3d.addEventListener("webglcontextlost", function (e) {
+    e.preventDefault();
+    kaputt = true;
+    ausschalten("fehler");
+  });
   st = grundstoffe();
   maschine = new Maschine();
   welt.szene.add(maschine.gruppe);
@@ -423,8 +507,16 @@ function vorbereiten() {
   maschine.paket.visible = true;
   maschine.schienen.forEach(function (s) { s.schiene.visible = s.schlitten.visible = true; });
   for (i = 0; i < maschine.platten.length; i++) { maschine.platten[i].visible = true; }
-  var r = welt.renderer;
-  var fertig = r.compileAsync ? r.compileAsync(welt.szene, welt.kamera) : Promise.resolve(r.compile(welt.szene, welt.kamera));
+  // Shader passend zu den Schnittebenen übersetzen (siehe welt.uebersetzen): die Szenen und der Roboter mit
+  // dem Scan, das Skript-Blatt zusätzlich mit seiner Kante, alles Übrige ohne. Früher passten die meisten
+  // Shader nicht und wurden beim ersten Bild jeder Szene nachübersetzt (auf dem Desktop rund 7 Sekunden).
+  // Die häufigste Fassung (eine Ebene) kommt zuletzt: auf sie wartet compileAsync.
+  var mitScan = szenen.map(function (sz) { return sz.gruppe; }).concat([rob.wurzel]);
+  var fertig = welt.uebersetzen([
+    { ebenen: [], wurzeln: [welt.szene] },
+    { ebenen: [scan.ebene, scan.ebene], wurzeln: [szenen[2].gruppe] },
+    { ebenen: [scan.ebene], wurzeln: mitScan }
+  ], welt.kamera);
   return fertig.then(function () {
     wiederVerstecken(versteckt);
     // je Szene einmal rendern (lädt Texturen und Instanzdaten hoch, baut Schattenshader)
@@ -461,11 +553,15 @@ function vorbereiten() {
 function einschalten() {
   if (an) { return; }
   try {
-    if (!gebaut && !bauen()) { root.classList.remove("film-an"); return; }
+    if (!gebaut && !bauen()) { kaputt = true; ausschalten("fehler"); return; }
   } catch (fehler) {
-    root.classList.remove("film-an");
+    kaputt = true;
+    ausschalten("fehler");
     return;
   }
+  // vom Besucher gewünscht: auf der leichten Stufe (falls der Film vorher schwerer gebaut war)
+  if (erzwungen && welt.stufe > 0) { welt.setzeStufe(0); stufeMelden(); }
+  qual.summe = 0; qual.n = 0; qual.langsam = 0;
   root.classList.add("film-an");
   an = true;
   themaLesen();
@@ -478,13 +574,18 @@ function einschalten() {
     bereit = true;
     root.classList.add("film-bereit");
     qual.ueberspringen = 90;
+    qual.ab = window.performance.now() + 1500;
     starten();
   };
   if (bereit) { start(); return; }
-  vorbereiten().then(start, function () { ausschalten(); });
+  // Vorlauf starten: während der Vorbereitung folgen Texte und Skala schon dem Scrollen
+  starten();
+  vorbereiten().then(start, function () { kaputt = true; ausschalten("fehler"); });
 }
 
-function ausschalten() {
+// grund: "langsam" (Bildrate), "fehler" (Kontextverlust, Ausnahme) oder leer (Pause, Einstellung);
+// film.js erfährt davon über das Ereignis „film-aus“ und bietet bei Bedarf „Film trotzdem starten“ an
+function ausschalten(grund) {
   var war = an || root.classList.contains("film-an");
   var mittendrin = an && gebaut && lies() >= filmTop + H;
   an = false;
@@ -502,6 +603,18 @@ function ausschalten() {
   if (heroText) { heroText.style.visibility = ""; heroWeg = false; }
   if (heroCta) { heroCta.removeAttribute("inert"); }
   for (var i = 0; i < kapitel.length; i++) { kapitel[i].el.classList.remove("an"); kapitel[i].an = false; }
+  document.dispatchEvent(new CustomEvent("film-aus", { detail: { grund: grund || "" } }));
+}
+
+// „Film trotzdem starten“: der Besucher entscheidet sich bewusst für den Film (auch bei „Bewegung
+// reduzieren“ oder nach dem Abschalten wegen niedriger Bildrate). Er startet auf der leichten Stufe und
+// schaltet sich nicht mehr von selbst ab; das gilt nur für diesen Besuch, gespeichert wird nichts.
+export function erzwingen() {
+  erzwungen = true;
+  langsamAus = false;
+  qual.langsam = 0;
+  if (gebaut && welt && welt.stufe > 0) { welt.setzeStufe(0); stufeMelden(); if (an) { messen(); } }
+  steuern();
 }
 
 function steuern() {
@@ -515,7 +628,8 @@ function steuern() {
   if (an && versatz !== null) { window.scrollTo(0, anker_.getBoundingClientRect().top + lies() - versatz); }
 }
 
-export function start() {
+export function start(optionen) {
+  if (optionen && optionen.erzwungen) { erzwungen = true; }
   try {
     var vorhanden = document.getElementById("film");
     if (!vorhanden || !vorhanden.querySelector(".buehne")) { root.classList.remove("film-an"); return; }
@@ -541,7 +655,8 @@ export function start() {
     }, true);
     // Sprachschalter der Seite: Namen auf den Platten neu malen (Skala und Skript-Blatt lesen die Sprache je Bild)
     document.addEventListener("sprache", function () { if (gebaut) { maschine.beschriftungMalen(); } });
-    document.addEventListener("visibilitychange", function () { if (an && !document.hidden) { starten(); } });
+    // zurück aus dem Hintergrund: die Zeit im Hintergrund zählt nicht als langsames Bild
+    document.addEventListener("visibilitychange", function () { if (an && !document.hidden) { letzte = window.performance.now(); starten(); } });
     if ("IntersectionObserver" in window) {
       new IntersectionObserver(function (eintraege) {
         sichtbar = eintraege[0].isIntersecting;
@@ -555,7 +670,8 @@ export function start() {
       document.fonts.load('700 58px "Raleway"').then(function () { if (gebaut) { maschine.beschriftungMalen(); } }, function () {});
     }
   } catch (fehler) {
-    ausschalten();
+    kaputt = true;
+    ausschalten("fehler");
     root.classList.remove("film-an");
   }
 }
