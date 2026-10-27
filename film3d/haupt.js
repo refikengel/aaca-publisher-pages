@@ -17,11 +17,16 @@
   3D-Bild selbst auf Stufe 0 zu langsam oder fällt es aus, übernimmt wieder die Bildfolge. Abgeschaltet wird
   der Film dabei nie; nur wenn auch die Bilder der Folge nicht ladbar sind, ist er aus.
 
-  Gedämpft (bei „Bewegung reduzieren“, Einstellung in film.js): dieselben Szenen, nur mit dem Scrollen
-  bewegt. Das Bild im Kreis ist dann die Bildfolge (auch wo Echtzeit-3D ginge; außer mit den Prüfadressen):
-  sie folgt nur der Scrollposition, und es gibt keinen Wechsel der Quelle. Nur wo ihre Bilder für einen großen
-  Kreis zu wenig Pixel haben (folgeScharf) und das Gerät 3D schafft, bleibt es bei Echtzeit-3D, ebenso nur mit
-  dem Scrollen bewegt. Dazu keine Dauerschleife, kein Nachgleiten und kein weiches Mausrad.
+  Handys und Tablets bekommen Echtzeit-3D wie der Rechner, wenn sie es schaffen (Grafik, Speicher, Kerne und
+  ein kurzer Rechentest, siehe grundFuerFolge; Einstellung BILDFOLGE_AUF_TOUCH in film.js). Die Bildfolge
+  überblendet zwischen zwei Bildern: steht die Seite zwischen ihnen, sieht man beide halbdurchsichtig
+  übereinander, und die Bewegung wirkt gestuft. Echtzeit-3D rechnet jedes Bild neu und zeigt immer ein klares Bild.
+
+  Gedämpft (bei „Bewegung reduzieren“, Einstellung in film.js): dieselben Szenen in derselben Quelle wie sonst
+  (Echtzeit-3D, wo das Gerät es schafft, sonst die Bildfolge). Große Bewegungen gehören dann dem Scrollen allein:
+  die Szene folgt der Scrollposition ohne Nachgleiten und ohne weiches Mausrad, Überblendungen sind kurz. Die
+  ruhige Eigenbewegung des 3D-Bildes (winkender Roboter, Staub, ein leichtes Schwanken der Kamera) läuft weiter,
+  auch im Stand (Entscheidung vom 27.10.2026); die Pause-Taste hält sie an (und mit ihr den ganzen Film).
 
   Scrollen: Der Browser scrollt selbst (Mausrad, Touchpad, Tastatur, Leiste, Touch), das bleibt auch dann
   flüssig, wenn der Film auf einem schwachen Gerät Zeit braucht: das Scrollen läuft im Compositor, nicht im
@@ -63,7 +68,6 @@ var pruef = (function () {
 })();
 
 function gedaempft() { return !!(mqReduce && mqReduce.matches); }
-var GRUND_RUHIG = "Bewegung reduzieren";
 
 function moeglich() {
   if (!window.requestAnimationFrame || kaputt) { return false; }
@@ -72,22 +76,18 @@ function moeglich() {
   return !root.classList.contains("ruhe");
 }
 
-// Reichen die Bilder der Folge (FOLGE.kante, 720 Pixel) für diesen Kreis? Kreis in CSS-Pixeln mal Pixeldichte
-// (bis 3, wie folge.js); bis etwa 15 % hochskaliert ist kein Unterschied zu sehen. Das gilt auf allen Handys;
-// große Kreise (große Bildschirme, hohe Pixeldichte am Rechner) brauchen mehr Pixel.
-function folgeScharf() {
-  return lay.r * 2 * Math.min(Math.max(window.devicePixelRatio || 1, 1), 3) <= FOLGE.kante * 1.15;
-}
+function beruehrung() { return !!(mqGrob && mqGrob.matches); }
 
 // Braucht dieses Gerät die Bildfolge statt Echtzeit-3D? Geprüft vor dem Laden von three.js, mit einer eigenen
 // kleinen Leinwand, die gleich wieder freigegeben wird. Leer: Echtzeit-3D; sonst der Grund (steht in
-// data-film-grund). Bei „Bewegung reduzieren“ die Bildfolge: sie bewegt sich nur mit dem Scrollen, und es gibt
-// keinen Wechsel der Quelle (keine Überblendung von selbst). Nur wo sie für den Kreis zu wenig Pixel hat und das
-// Gerät Echtzeit-3D schafft, bleibt es bei 3D, gedämpft (es bewegt sich ebenso nur mit dem Scrollen).
+// data-film-grund). Auch Handys und Tablets bekommen 3D, wenn sie es schaffen (strengere Grenzen als am Rechner:
+// mindestens fünf Kerne, mehr als 2 GB, bestandener Rechentest); die laufende Anpassung (qualitaet) holt jedes
+// Gerät, das es doch nicht schafft, auf eine leichtere Stufe und zuletzt zur Bildfolge zurück. „Bewegung
+// reduzieren“ ändert nichts an der Quelle: das Bild bewegt sich dann nur mit dem Scrollen (siehe schleife).
 function grundFuerFolge() {
   if (pruef === "folge") { return "Prüfadresse"; }
-  if (folgeAufTouch && !pruef && mqGrob && mqGrob.matches) { return "Touch-Gerät"; }
-  if (gedaempft() && !pruef && folgeScharf()) { return GRUND_RUHIG; }
+  var touch = beruehrung();
+  if (folgeAufTouch && !pruef && touch) { return "Touch-Gerät"; }
   if (typeof WebGL2RenderingContext === "undefined") { return "kein WebGL 2"; }
   if (pruef === "nur3d") { return ""; }
   try {
@@ -103,9 +103,9 @@ function grundFuerFolge() {
   }
   if (pruef === "3d") { return ""; }
   var n = window.navigator || {};
-  if (n.hardwareConcurrency && n.hardwareConcurrency <= 2) { return "wenige Kerne"; }
+  if (n.hardwareConcurrency && n.hardwareConcurrency <= (touch ? 4 : 2)) { return "wenige Kerne"; }
   if (n.deviceMemory && n.deviceMemory <= 2) { return "wenig Speicher"; }
-  if (rechenfaktor() > LANGSAM_AB) { return "langsames Gerät"; }
+  if (rechenfaktor(touch) > (touch ? LANGSAM_AB_TOUCH : LANGSAM_AB)) { return "langsames Gerät"; }
   return "";
 }
 
@@ -115,17 +115,23 @@ function grundFuerFolge() {
 // mehrere Sekunden Hauptthread-Zeit (die Seite steht in dieser Zeit still) und wird danach oft doch verworfen.
 // Die Bildfolge sieht gleich aus und läuft auf jedem Gerät. Der Faktor steht in data-film-faktor (Diagnose).
 // Erscheint das Gerät zu langsam, wird bis zu zweimal nachgemessen und der beste Lauf gezählt: ein einzelner Hänger
-// (anderes Programm, Hintergrundarbeit) soll kein schnelles Gerät aussortieren.
-var REFERENZ_MS = 5.5, LANGSAM_AB = 4;
-function rechenfaktor() {
-  var best = 1e9, f = 0, k, i, x, t0;
+// (anderes Programm, Hintergrundarbeit) soll kein schnelles Gerät aussortieren. Handys takten ihre Kerne erst
+// hoch, wenn sie Last sehen, und wechseln zwischen schnellen und langsamen Kernen (gemessen am OnePlus Nord 2T:
+// derselbe Lauf dauert 9 bis 28 ms): dort erst 30 ms aufwärmen und fünfmal messen, der beste Lauf zählt.
+var REFERENZ_MS = 5.5, LANGSAM_AB = 4, LANGSAM_AB_TOUCH = 4.5;
+function rechenfaktor(touch) {
+  var best = 1e9, f = 0, k, i, x = 0, t0, versuche = touch ? 5 : 3;
   try {
-    for (k = 0; k < 3; k++) {
+    if (touch) {
+      t0 = window.performance.now();
+      while (window.performance.now() - t0 < 30) { for (i = 0; i < 20000; i++) { x += Math.sqrt(i); } }
+    }
+    for (k = 0; k < versuche; k++) {
       t0 = window.performance.now(); x = 0;
       for (i = 0; i < 2000000; i++) { x += Math.sqrt(i) * 1.0000001; }
       t0 = window.performance.now() - t0;
       if (x >= 0 && t0 < best) { best = t0; }
-      if (best / REFERENZ_MS <= LANGSAM_AB) { break; }
+      if (best / REFERENZ_MS <= (touch ? LANGSAM_AB_TOUCH : LANGSAM_AB)) { break; }
     }
     f = best < 1e9 ? best / REFERENZ_MS : 0;
   } catch (fehler) { f = 0; }
@@ -198,7 +204,8 @@ function messen() {
   lay.y = ar.top - br.top + ar.height / 2;
   lay.r = Math.max(60, ar.width / 2);
   // leichte Stufe und Bildfolge: die Skala ohne Goldstaub (scharf bleibt sie, sie kostet kaum Zeit)
-  skala.leicht = !bild || bild.stufe === 0 || bild.art === "folge";
+  // (auch auf Handys: dort ohne Goldstaub, die große Zeichenfläche ganz zu löschen und zu füllen kostet je Bild viel)
+  skala.leicht = !bild || bild.stufe === 0 || bild.art === "folge" || beruehrung();
   skala.messen(W, H, dpr, lay);
   var kante = Math.round(ar.width), dichte = window.devicePixelRatio || 1;
   [bild, kommt && kommt.quelle, geht && geht.quelle].forEach(function (q) { if (q) { q.groesse(kante, dichte); } });
@@ -297,10 +304,13 @@ function gleiten(dt) {
 // halbe Bildrate: das halbiert die Arbeit der Dauerschleife auf schwachen Geräten und Laptops (Wärme, Lüfter,
 // Akku) und lässt dem Rest der Seite Luft für die ersten Bilder beim Weiterscrollen. Sobald gescrollt wird,
 // läuft wieder jedes Bild.
-var IM_STAND_MS = 30, STAND_NACH_MS = 400;
+// Auf Handys und Tablets nach 8 Sekunden ohne Scrollen nur noch 15 Bilder pro Sekunde (der Akku zählt dort mehr als
+// die Feinheit einer ruhigen Bewegung).
+var IM_STAND_MS = 30, STAND_NACH_MS = 400, STAND_LANGSAM_NACH_MS = 8000, IM_STAND_LANGSAM_MS = 66;
 var letzteZeichnung = 0, imStandVorher = false;
+function standTakt() { return beruehrung() && ruhe() > STAND_LANGSAM_NACH_MS ? IM_STAND_LANGSAM_MS : IM_STAND_MS; }
 function imStand() {
-  if (!bild || !bild.dauerlauf || geht || gleit.aktiv || gedaempft() || ruhe() < STAND_NACH_MS) { return false; }
+  if (!bild || !bild.dauerlauf || geht || gleit.aktiv || ruhe() < STAND_NACH_MS) { return false; }
   return Math.abs(klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE) - sGl) < 0.0005;
 }
 
@@ -308,25 +318,28 @@ function schleife(jetzt) {
   raf = 0;
   if (!an || document.hidden || standbildModus) { return; }
   var stand = sichtbar && imStand();
-  if (stand && jetzt - letzteZeichnung < IM_STAND_MS - 2) {
+  if (stand && jetzt - letzteZeichnung < standTakt() - 2) {
     // dieses Bild auslassen; die Zeit läuft weiter (letzte bleibt stehen, dt im nächsten gezeichneten Bild stimmt)
     raf = window.requestAnimationFrame(schleife);
     return;
   }
   letzteZeichnung = jetzt;
-  var dt = klemme((jetzt - letzte) / 1000, 0, 0.05), roh = (jetzt - letzte) / 1000;
+  // im Stand zählt die ganze Zeit seit dem letzten gezeichneten Bild (bis 0,1 s), sonst liefe die ruhige Bewegung
+  // bei 15 Bildern pro Sekunde um ein Viertel langsamer als bei 30
+  var dt = klemme((jetzt - letzte) / 1000, 0, stand ? 0.1 : 0.05), roh = (jetzt - letzte) / 1000;
   letzte = jetzt;
   gleiten(dt);
-  var ruhig = gedaempft(), weiter = false;
+  var ohneGleiten = gedaempft(), weiter = false;
   if (sichtbar) {
     kopfPruefen();
     var ziel_ = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
     var diff = ziel_ - sGl;
     // große Sprünge (Links, Pos1/Ende) und gedämpft sofort, sonst eine leichte Annäherung (das Rad ist
     // schon geglättet)
-    if (ruhig || Math.abs(diff) > 2.5) { sGl = ziel_; } else { sGl += diff * (1 - Math.exp(-dt / 0.06)); }
-    // Filmzeit: folgt der Stelle (wie die Bildfolge); nur ungedämpft läuft dazu die Zeit im Leerlauf weiter
-    if (!ruhig) { leerlauf += dt; }
+    if (ohneGleiten || Math.abs(diff) > 2.5) { sGl = ziel_; } else { sGl += diff * (1 - Math.exp(-dt / 0.06)); }
+    // Filmzeit: folgt der Stelle (wie die Bildfolge); dazu läuft im Leerlauf die Zeit weiter (auch gedämpft: die
+    // ruhige Eigenbewegung bleibt, nur die großen Bewegungen sind ans Scrollen gebunden)
+    leerlauf += dt;
     zeit = sGl * ZEIT_JE_HOEHE + leerlauf;
     if (bild) {
       zeichneBild();
@@ -336,9 +349,9 @@ function schleife(jetzt) {
     } else {
       zeichneVorlauf();
     }
-    // Dauerschleife nur, solange sich von selbst etwas bewegt (3D ungedämpft, eine Überblendung); sonst
+    // Dauerschleife nur, solange sich von selbst etwas bewegt (das 3D-Bild, eine Überblendung); sonst
     // weckt erst das Scrollen die Schleife wieder
-    weiter = !!(bild && bild.dauerlauf && !ruhig) || !!geht || Math.abs(ziel_ - sGl) > 0.0005;
+    weiter = !!(bild && bild.dauerlauf) || !!geht || Math.abs(ziel_ - sGl) > 0.0005;
   }
   if (an && ((sichtbar && weiter) || gleit.aktiv)) { raf = window.requestAnimationFrame(schleife); }
 }
@@ -363,8 +376,9 @@ function zeichneVorlauf() {
 // soll die vorberechnete Bildfolge, wo sie besser ist (flüssiger und, auf Stufe 3 gerendert, auch schärfer):
 // bei unter etwa 15 Bildern pro Sekunde sofort (auf Stufe 0 schon unter etwa 25), sonst wenn zwei Fenster
 // hintereinander unter etwa 22 Bildern pro Sekunde liegen (auf Stufe 0 unter etwa 30). Je schneller das
-// geschieht, desto kürzer sieht ein schwaches Gerät ein ruckelndes Bild. Gedämpft läuft die Schleife nur beim
-// Scrollen; gemessen wird dann nur das (ein neuer Anlauf setzt die Zeit zurück, siehe starten).
+// geschieht, desto kürzer sieht ein schwaches Gerät ein ruckelndes Bild. Gemessen wird nur beim Scrollen (im
+// Stand läuft die Schleife absichtlich mit halber Bildrate, siehe imStand); ein neuer Anlauf setzt die Zeit
+// zurück (siehe starten).
 var FENSTER_S = 1.5, FENSTER_MIN_BILDER = 20, FENSTER_MAX_S = 4;
 function qualitaet(jetzt, roh) {
   if (kommt && kommt.art === "folge") { return; }   // der Wechsel zur Bildfolge läuft schon
@@ -549,7 +563,7 @@ function vorbereitungLaufen(k) {
   // Wischen soll dabei nicht stocken
   var mitRuhe = k.art === "3d" && !!bild;
   var holen = (mitRuhe && !k.modul ? scrollpause() : Promise.resolve()).then(function () {
-    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=12"));
+    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=13"));
   });
   holen.then(function (m) {
     k.modul = m;
@@ -661,7 +675,7 @@ function bereitMelden() {
   starten();
 }
 
-// Das 3D-Bild ist selbst auf Stufe 0 zu langsam (oder „Bewegung reduzieren“ wurde eingeschaltet): die
+// Das 3D-Bild ist selbst auf Stufe 0 zu langsam: die
 // vorberechnete Bildfolge übernimmt (das 3D-Bild läuft weiter, bis das erste Bild der Folge da ist). Zeigt der
 // Kreis schon die Folge (3D war erst in Vorbereitung), bleibt sie und lädt nun alle Bilder.
 function zurFolge(grund) {
@@ -673,20 +687,6 @@ function zurFolge(grund) {
     return;
   }
   if (!folgeKaputt) { vorbereiten("folge"); }
-}
-
-// „Bewegung reduzieren“ während des Besuchs geändert: eingeschaltet übernimmt die Bildfolge (wo sie scharf genug
-// ist), ausgeschaltet wird die Quelle neu gewählt, falls die Folge nur deswegen lief (sonst bleibt der Grund,
-// z. B. Touch-Gerät)
-function bewegungGeaendert() {
-  if (!an || !ziel) { return; }
-  if (gedaempft() && !pruef) {
-    if (ziel === "3d" && folgeScharf()) { zurFolge(GRUND_RUHIG); }
-  } else if (root.getAttribute("data-film-grund") === GRUND_RUHIG) {
-    ziel = "";
-    root.removeAttribute("data-film-grund");
-    weiterschalten();
-  }
 }
 
 function einschalten() {
@@ -774,7 +774,7 @@ export function start(optionen) {
         if (an && (buehne.clientWidth !== W || buehne.clientHeight !== H || anker.getBoundingClientRect().width !== lay.r * 2)) { messen(); if (bild) { zeichneBild(); } }
       }, 120);
     });
-    // ohne Dauerschleife (Bildfolge, gedämpft) weckt das Scrollen die Schleife, solange der Film im Bild ist
+    // ohne Dauerschleife (Bildfolge) weckt das Scrollen die Schleife, solange der Film im Bild ist
     // (sonst nichts zu zeichnen; kommt er wieder ins Bild, startet sie der Beobachter unten)
     window.addEventListener("scroll", function () {
       zuletztGescrollt = window.performance.now();
@@ -785,7 +785,9 @@ export function start(optionen) {
     // nicht, wenn dieselbe Abfrage vorher schon gelesen wurde, und gedaempft() liest mqReduce in jedem Bild
     // (so ging die Meldung verloren, solange das 3D-Bild lief)
     [mq("(prefers-reduced-motion: reduce)"), mq("(forced-colors: active)")].forEach(function (q) {
-      if (q && q.addEventListener) { q.addEventListener("change", function () { steuern(); bewegungGeaendert(); if (an) { starten(); } }); }
+      // „Bewegung reduzieren“ wird während des Besuchs ein- oder ausgeschaltet: die Quelle und die Eigenbewegung
+      // bleiben, nur das Nachgleiten endet oder beginnt (gedaempft() wird in jedem Bild gelesen)
+      if (q && q.addEventListener) { q.addEventListener("change", function () { steuern(); if (an) { starten(); } }); }
     });
     if (mqHell && mqHell.addEventListener) { mqHell.addEventListener("change", function () { if (an) { themaLesen(); } }); }
     document.addEventListener("click", function (e) {

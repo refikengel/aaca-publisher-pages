@@ -21,17 +21,22 @@
 
      BEI_REDUZIERTER_BEWEGUNG: Was geschieht, wenn das Gerät „Bewegung reduzieren“ meldet (unter Android
      auch, wenn die Animationen in den Entwickleroptionen oder den Bedienungshilfen abgeschaltet sind)?
-       "gedämpft"  Film und Kanäle laufen trotzdem, aber nur mit dem Scrollen: keine selbst laufende
-                   Bewegung, kein Nachgleiten, kurze Überblendungen, Texte blenden nur ein und aus.
-                   Die Pause-Taste bleibt und schaltet beide Filme ab. (Standard)
+       "gedämpft"  Film und Kanäle laufen trotzdem. Große Bewegungen gehören dem Scrollen allein: kein
+                   Nachgleiten, kurze Überblendungen, Texte blenden nur ein und aus, die Sterne stehen
+                   still. Die ruhige Eigenbewegung bleibt (Roboter, Staub und Kamera im 3D-Bild, die
+                   kleinen Dauerbewegungen in den Szenen der Kanäle, der laufende Punkt am Startzeichen);
+                   die sichtbare Pause-Taste hält sie an und schaltet dabei beide Filme ab. (Standard)
        "aus"       Film und Kanäle bleiben aus; die Seite ist die einfache, vollständig lesbare Fassung,
                    unter dem Hero steht „Film trotzdem starten“.
 
      BILDFOLGE_AUF_TOUCH: Welches Bild bekommt der Kreis auf Touch-Geräten (Handys, Tablets)?
-       true   die vorberechnete Bildfolge: sofort da, flüssig auch auf schwachen Geräten, dafür bis zu
-              etwa 4 MB Bilder, die nach und nach geladen werden (Standard)
-       false  Echtzeit-3D wie am Rechner, wenn das Gerät es schafft (vorher einige Sekunden Vorbereitung,
-              in denen die Bildfolge überbrückt)
+       true   immer die vorberechnete Bildfolge: sofort da und leicht, bis zu etwa 4 MB Bilder; sie überblendet
+              aber zwischen zwei Bildern (steht die Seite dazwischen, sieht man beide halbdurchsichtig
+              übereinander) und wirkt gestuft
+       false  Echtzeit-3D wie am Rechner, wenn das Gerät es schafft (Grafik, Speicher, Kerne und ein kurzer
+              Rechentest; vorher einige Sekunden Vorbereitung, in denen die Bildfolge überbrückt): jedes Bild
+              wird neu gerechnet, die Bewegung ist klar und lückenlos. Schwache Geräte bleiben bei der
+              Bildfolge, und jedes Gerät, das es doch nicht schafft, fällt selbst darauf zurück (Standard)
 
      Rechner mit Grafikkarte bekommen immer Echtzeit-3D (bis es bereit ist, überbrückt die Bildfolge),
      Rechner ohne schnelle Grafik und sehr schwache Geräte immer die Bildfolge.
@@ -42,7 +47,7 @@
        true   die Seite fängt das Mausrad ab und scrollt per Skript: weicher Auslauf, aber das ganze
               Scrollen hängt an der Rechenzeit des Hauptthreads und ruckelt auf schwachen Geräten */
   var BEI_REDUZIERTER_BEWEGUNG = "gedämpft";
-  var BILDFOLGE_AUF_TOUCH = true;
+  var BILDFOLGE_AUF_TOUCH = false;
   var WEICHES_SCROLLEN = false;
 
   var reduziertAus = BEI_REDUZIERTER_BEWEGUNG === "aus";
@@ -79,7 +84,7 @@
     root.classList.add("film-an");
     knopfAnpassen();
     try {
-      import("./film3d/haupt.js?v=12").then(function (m) {
+      import("./film3d/haupt.js?v=13").then(function (m) {
         modul = m;
         m.start({ erzwungen: erzwungen, reduziertAus: reduziertAus, folgeAufTouch: BILDFOLGE_AUF_TOUCH, weichesRad: WEICHES_SCROLLEN });
       }, function () { geladen = false; ausGrund = "fehler"; zurueck(); knopfAnpassen(); });
@@ -139,7 +144,7 @@
   if (/[?&]diag(?:=|&|#|$)/.test(window.location.search)) {
     var diagLaden = function () {
       var s = document.createElement("script");
-      s.src = "diag.js?v=11";
+      s.src = "diag.js?v=13";
       document.head.appendChild(s);
     };
     if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", diagLaden); } else { diagLaden(); }

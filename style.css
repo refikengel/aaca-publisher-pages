@@ -2193,9 +2193,12 @@ html.bewegt .knopf-link {
   transition: background-color .3s var(--ease), border-color .3s var(--ease), color .3s var(--ease), translate .5s cubic-bezier(.34, 1.56, .64, 1);
 }
 
-/* „Bewegung reduzieren“: nichts bewegt sich von selbst (Dauerbewegungen enden sofort, Übergänge entfallen).
-   Die beiden Filme laufen gedämpft weiter (Einstellung in film.js): nur mit dem Scrollen, mit kurzen
+/* „Bewegung reduzieren“: große Bewegungen gehören dem Scrollen allein (Dauerbewegungen enden sofort, Übergänge
+   entfallen). Die beiden Filme laufen gedämpft weiter (Einstellung in film.js): nur mit dem Scrollen, mit kurzen
    Überblendungen im Kreis; Texte, Himmel und Geräte blenden nur ein und aus, statt zu wandern.
+   Die ruhige Eigenbewegung bleibt (Entscheidung vom 27.10.2026): im 3D-Bild des Films (haupt.js: Roboter, Staub,
+   Kamera), der laufende Punkt am Startzeichen und die kleinen Dauerbewegungen in den Szenen der Kanäle; die
+   Ausnahmen stehen am Ende des Blocks. Die Pause-Taste hält alles an.
    Übergänge ganz aus (0 s, ohne Verzögerung), nicht nur sehr kurz: Sonst startet jede Änderung beim Scrollen
    einen winzigen Übergang (die Eigenschaft gilt für alles), und der Browser rechnet den Stil doppelt (am PC
    mit vierfach gedrosselter CPU in den Kanälen 73 % der Zeit). */
@@ -2217,6 +2220,16 @@ html.bewegt .knopf-link {
   html.kanalfilm .kanal-text > *,
   html.kanalfilm .kanal-los { translate: none; }
   html.kanalfilm .kanal-buehne { --auf-weg: 0px; }
+  /* Die ruhige Eigenbewegung läuft weiter, endlos mit ihrer eigenen Dauer (die Regel oben setzt sonst jede
+     Dauer auf 0,01 ms und die Wiederholungen auf eins; die Ausnahmen sind genauer und gelten nur, solange der
+     jeweilige Film läuft: nach der Pause-Taste fehlen die Klassen film-an und kanalfilm, und html.ruhe hält
+     auch diese Bewegungen an). Die Werte entsprechen den Regeln der Elemente. */
+  html.film-an:not(.ruhe) .film-start i::after { animation-duration: 2.4s !important; animation-iteration-count: infinite !important; }
+  html.kanalfilm:not(.ruhe) .staub { animation-duration: 11s !important; animation-iteration-count: infinite !important; }
+  html.kanalfilm:not(.ruhe) .tt-platte { animation-duration: 5s !important; animation-iteration-count: infinite !important; }
+  html.kanalfilm:not(.ruhe) .tt-herzen i { animation-duration: 2.6s !important; animation-iteration-count: infinite !important; }
+  html.kanalfilm:not(.ruhe) .ig-schweben { animation-duration: 9s !important; animation-iteration-count: infinite !important; }
+  html.kanalfilm:not(.ruhe) .fb-schweben { animation-duration: 10s !important; animation-iteration-count: infinite !important; }
 }
 html.ruhe *, html.ruhe *::before, html.ruhe *::after {
   animation-duration: .01ms !important;

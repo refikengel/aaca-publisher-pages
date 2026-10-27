@@ -8,8 +8,9 @@
   rechnet das Stylesheet daraus. Nach der letzten Szene löst sich die Bühne und scrollt mit der Seite weg.
 
   Der Film läuft unter denselben Bedingungen wie der Hauptfilm (film.js): auf jedem Gerät und in jeder
-  Fenstergröße, bei „Bewegung reduzieren“ gedämpft (nur mit dem Scrollen, ohne die kleinen Dauerbewegungen
-  in den Szenen, Texte ohne Wandern; das regelt das Stylesheet). Ohne Skript, bei erzwungenen Farben und
+  Fenstergröße, bei „Bewegung reduzieren“ gedämpft (die Szenen öffnen und bewegen sich nur mit dem Scrollen,
+  Texte ohne Wandern; die kleinen Dauerbewegungen in den Szenen laufen weiter, das regelt das Stylesheet,
+  die Pause-Taste hält sie an). Ohne Skript, bei erzwungenen Farben und
   nach der Pause-Taste bleibt „Kanäle“ eine einfache Liste mit Links, mit der Einstellung
   BEI_REDUZIERTER_BEWEGUNG = "aus" in film.js auch bei „Bewegung reduzieren“. Es wird nichts gespeichert,
   nichts gesendet und nichts nachgeladen. Die Szenen sind Dekoration (aria-hidden); die Links bleiben echte
@@ -184,10 +185,10 @@
 
   // Während gescrollt wird, ruhen die kleinen Dauerbewegungen der Szenen (Goldstaub, Platte, Herzen, Schweben;
   // Stylesheet, Klasse wischt): der Browser rechnete sie sonst in jedem Bild mit (gemessen: etwa zwei Drittel der
-  // Stilarbeit beim Wischen). Eine Fünftelsekunde nach dem letzten Scrollen laufen sie weiter. Gedämpft laufen
-  // sie ohnehin nicht.
+  // Stilarbeit beim Wischen). Eine Fünftelsekunde nach dem letzten Scrollen laufen sie weiter. Das gilt auch
+  // gedämpft („Bewegung reduzieren“): auch dort laufen sie, und das Wischen soll dadurch nicht stocken.
   function wischen() {
-    if (!an || ruht !== false || (mqReduce && mqReduce.matches)) { return; }
+    if (!an || ruht !== false) { return; }
     if (!wischt) { wischt = true; buehne.classList.add("wischt"); }
     window.clearTimeout(wischUhr);
     wischUhr = window.setTimeout(function () { wischt = false; if (buehne) { buehne.classList.remove("wischt"); } }, 200);

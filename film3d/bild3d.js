@@ -5,7 +5,7 @@
   beide haben dieselbe Schnittstelle:
     art, leinwand, stufe, setzeStufe(n), groesse(kante, pixeldichte), vorbereiten(nochAn) → Promise (true:
     fertig, false: angehalten, ein neuer Aufruf macht dort weiter), zeichne(Z, zeit, lay), sprache(),
-    freigeben(), dauerlauf (die Bildschleife läuft ständig, außer gedämpft), wachsam (Bildrate wird gemessen).
+    freigeben(), dauerlauf (die Bildschleife läuft ständig, auch gedämpft), wachsam (Bildrate wird gemessen).
   Die Vorbereitung läuft in kleinen Schritten, einer je Bild, damit die Bildfolge davor flüssig bleibt.
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";

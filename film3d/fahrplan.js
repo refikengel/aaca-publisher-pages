@@ -14,8 +14,8 @@ export const MITTE = [0.15, 2.35, 3.95, 5.55, 7.15, 8.75, 10.35, 11.95];
 export const ENDE = 12.8;
 export const N_SCHICHT = 8;
 // Filmzeit in Sekunden je Bildschirmhöhe: so ist die Bildfolge gerendert (Bild bei s zeigt die Zeit s * 2),
-// und so läuft die Zeit im 3D-Bild, solange es gedämpft ist; ein 3D-Bild zur Zeit 2 s gleicht dann dem Bild
-// der Folge an derselben Stelle
+// und so läuft die Zeit im 3D-Bild mit dem Scrollen (dazu kommt die Zeit im Leerlauf, die beim Übernehmen der
+// Folge bei null beginnt); ein 3D-Bild zur Zeit 2 s gleicht dann dem Bild der Folge an derselben Stelle
 export const ZEIT_JE_HOEHE = 2;
 export const UEBERBLICK = [0.95, 1.85];
 export function fahrtBeginn(j) { return j === 1 ? UEBERBLICK[0] : MITTE[j] - 0.8; }

@@ -46,6 +46,8 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
   var nutzeBitmap = KANN_BITMAP, blobs = [], bitmaps = [], bitmapLaeuft = [], bitmapJetzt = 0, bitmapFehler = 0, letztePos = 0, richtung = 1;
   var i;
   for (i = 0; i < N; i++) { bilder.push(null); fertig.push(false); angefragt.push(false); blobs.push(null); bitmaps.push(null); bitmapLaeuft.push(false); }
+  // für die Diagnose (?diag) und Prüfungen: wie die Bilder gerade dekodiert werden
+  document.documentElement.setAttribute("data-film-dekodieren", nutzeBitmap ? "bitmap" : "bild");
 
   function adresse(k) { return FOLGE.ordner + "f" + ("00" + k).slice(-3) + ".webp"; }
 
@@ -89,6 +91,7 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
   function zurueckZuBildern() {
     if (!nutzeBitmap) { return; }
     nutzeBitmap = false;
+    document.documentElement.setAttribute("data-film-dekodieren", "bild");
     bitmaps.forEach(function (b) { if (b && b.close) { try { b.close(); } catch (e) { /* egal */ } } });
     for (var m = 0; m < N; m++) { bitmaps[m] = null; blobs[m] = null; if (!bilder[m]) { fertig[m] = false; angefragt[m] = false; } }
     gezeichnet.a = -1;
