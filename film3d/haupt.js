@@ -15,7 +15,9 @@
   Laden von three.js), wird es währenddessen in kleinen Schritten vorbereitet und übernimmt dann an derselben
   Stelle (kurze Überblendung; bis dahin lädt die Folge nur Bilder nahe der aktuellen Stelle). Wird das
   3D-Bild selbst auf Stufe 0 zu langsam oder fällt es aus, übernimmt wieder die Bildfolge. Abgeschaltet wird
-  der Film dabei nie; nur wenn auch die Bilder der Folge nicht ladbar sind, ist er aus.
+  der Film dabei nie; nur wenn auch die Bilder der Folge nicht ladbar sind, ist er aus. Bleibt die Bildfolge das
+  Bild, spielt sie im Stand am Anfang die vorberechnete Schleife des winkenden Roboters ab (heroSchleife), so wie
+  Echtzeit-3D dort von selbst weiterläuft.
 
   Handys und Tablets bekommen Echtzeit-3D wie der Rechner, wenn sie es schaffen (Grafik, Speicher, Kerne und
   ein kurzer Rechentest, siehe grundFuerFolge; Einstellung BILDFOLGE_AUF_TOUCH in film.js). Die Bildfolge
@@ -314,9 +316,74 @@ function imStand() {
   return Math.abs(klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE) - sGl) < 0.0005;
 }
 
+// Schleife des Hero (folge.js, schleife-daten.js): Zeigt die Bildfolge das Bild im Kreis und steht die Seite am
+// Anfang (Scrollposition 0, dort zeigt die Folge ihr erstes Bild), spielt der Kreis nach STAND_NACH_MS ohne Scrollen
+// die vorberechnete Schleife des winkenden Roboters ab, so wie Echtzeit-3D dort von selbst weiterläuft. Auch bei
+// „Bewegung reduzieren“: Die ruhige Eigenbewegung im Hero läuft dann ebenso, große Bewegungen bleiben ans Scrollen
+// gebunden (Regel von Refik vom 27.10.2026). Nicht nach der Pause-Taste (der Film ist dann aus), nicht im
+// Hintergrund und nicht, solange die Folge nur die Vorbereitung von Echtzeit-3D überbrückt. Gezeichnet wird nur
+// das Bild im Kreis, und nur wenn ein neues Bild der Schleife dran ist (rund 12 je Sekunde); dazwischen schläft die
+// Bildschleife (Zeitgeber bis kurz vor dem nächsten Bild, dann requestAnimationFrame), statt jedes Bild des Browsers
+// zu wecken. Skala, Texte und Filmzeit bleiben dabei stehen, die Qualitätsmessung (nur für Echtzeit-3D) ebenso. Das
+// erste Scrollen hält sie sofort an: schleife() zeichnet dann wieder das Bild zur Scrollposition. Ihr Zustand steht
+// in data-film-schleife: läuft, ruht (bereit, aber nicht am Anfang oder gerade gescrollt) oder aus:Grund.
+var SCHLEIFE_BIS = 0.1 / FOLGE.proHoehe;
+var hs = { laeuft: false, zeit: 0, letzte: 0, wert: "", wecker: 0, uhr: 0 };
+// die Scrollposition ist sGl (ohne Scrollen seit STAND_NACH_MS gleich der Seite; sie hier neu zu lesen, zwänge den
+// Browser in jedem Durchlauf zu einer Stilberechnung)
+function heroSchleifeGeht() {
+  return !!(an && sichtbar && bild && bild.art === "folge" && ziel === "folge" && bild.schleifeStand && bild.schleifeStand() === "bereit" &&
+    !geht && !gleit.aktiv && sGl < SCHLEIFE_BIS);
+}
+// anhalten (der Zeitgeber fällt weg) und den Zustand pflegen
+function heroSchleifeAus() {
+  if (hs.uhr) { window.clearTimeout(hs.uhr); hs.uhr = 0; }
+  hs.laeuft = false;
+  heroSchleifePflegen();
+}
+// ein Durchlauf von schleife(): true, wenn die Schleife des Hero ihn übernommen hat (sie plant den nächsten selbst)
+function heroSchleife(jetzt) {
+  if (ruhe() < STAND_NACH_MS || !heroSchleifeGeht()) { heroSchleifeAus(); return false; }
+  if (!hs.laeuft) { hs.laeuft = true; hs.zeit = 0; hs.letzte = jetzt; heroSchleifePflegen(); }
+  hs.zeit += klemme((jetzt - hs.letzte) / 1000, 0, 0.1);
+  hs.letzte = jetzt;
+  // die Filmzeit läuft dabei nicht weiter (wie im Stand der Folge bisher); das erste Bild danach bekommt ein kurzes dt
+  letzte = jetzt;
+  var n = bild.schleife.anzahl, takt = bild.schleife.dauer / n, k = Math.floor(hs.zeit / takt);
+  bild.schleifeZeichnen(k % n);
+  var warten = ((k + 1) * takt - hs.zeit) * 1000 - 12;
+  if (warten > 4) {
+    hs.uhr = window.setTimeout(function () { hs.uhr = 0; if (an && !raf) { raf = window.requestAnimationFrame(schleife); } }, warten);
+  } else {
+    raf = window.requestAnimationFrame(schleife);
+  }
+  return true;
+}
+// am Anfang, die Schleife ist bereit, aber eben wurde gescrollt: nach der Pause die Bildschleife wecken
+function heroSchleifeWecken() {
+  if (hs.wecker || !heroSchleifeGeht()) { return; }
+  hs.wecker = window.setTimeout(function () { hs.wecker = 0; if (an) { starten(); } }, Math.max(0, STAND_NACH_MS - ruhe()) + 20);
+}
+// in jedem Durchlauf ohne Schleife und bei jedem Wechsel: die Schleife laden lassen, sobald sie gebraucht werden
+// kann (die Folge bleibt das Bild; folge.js lädt sie erst nach den groben Bildern der Folge und meldet sich dann
+// selbst mit neuZeichnen), und ihren Zustand in data-film-schleife schreiben (nur bei einer Änderung)
+function heroSchleifePflegen() {
+  var w;
+  if (!an) { w = root.classList.contains("ruhe") ? "aus:Pause" : "aus:Film aus"; }
+  else if (!bild) { w = "aus:nicht geladen"; }
+  else if (bild.art !== "folge" || ziel !== "folge") { w = "aus:Echtzeit-3D"; }
+  else {
+    if (bild.schleifeLaden) { bild.schleifeLaden(); }
+    var stand = bild.schleifeStand ? bild.schleifeStand() : "nicht geladen";
+    w = stand !== "bereit" ? "aus:" + stand : (hs.laeuft ? "läuft" : "ruht");
+  }
+  if (w !== hs.wert) { hs.wert = w; root.setAttribute("data-film-schleife", w); }
+}
+
 function schleife(jetzt) {
   raf = 0;
-  if (!an || document.hidden || standbildModus) { return; }
+  if (!an || document.hidden || standbildModus) { heroSchleifeAus(); return; }
+  if (heroSchleife(jetzt)) { return; }
   var stand = sichtbar && imStand();
   if (stand && jetzt - letzteZeichnung < standTakt() - 2) {
     // dieses Bild auslassen; die Zeit läuft weiter (letzte bleibt stehen, dt im nächsten gezeichneten Bild stimmt)
@@ -354,6 +421,7 @@ function schleife(jetzt) {
     weiter = !!(bild && bild.dauerlauf) || !!geht || Math.abs(ziel_ - sGl) > 0.0005;
   }
   if (an && ((sichtbar && weiter) || gleit.aktiv)) { raf = window.requestAnimationFrame(schleife); }
+  else { heroSchleifeWecken(); }
 }
 
 // solange es noch kein Bild im Kreis gibt: alles außer dem Bild; dort steht bis dahin das Standbild
@@ -563,7 +631,7 @@ function vorbereitungLaufen(k) {
   // Wischen soll dabei nicht stocken
   var mitRuhe = k.art === "3d" && !!bild;
   var holen = (mitRuhe && !k.modul ? scrollpause() : Promise.resolve()).then(function () {
-    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=13"));
+    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=14") : import("./folge.js?v=14"));
   });
   holen.then(function (m) {
     k.modul = m;
@@ -715,6 +783,7 @@ function ausschalten(grund) {
   an = false;
   gleit.aktiv = false;
   stoppen();
+  heroSchleifeAus();
   window.removeEventListener("wheel", rad, { passive: false });
   root.classList.remove("film-ende", "film-an", "film-bereit");
   filmEnde = false;
@@ -827,16 +896,17 @@ export function start(optionen) {
 
 // Für das Werkzeug, das die Bildfolge rendert (_werkzeuge/bildfolge_rendern.mjs): ein Bild des 3D-Kreises
 // zur Scrollposition s und Zeit t, kante Pixel im Quadrat (doppelt so groß gerendert und verkleinert),
-// Ecken außerhalb des Kreises schwarz, dazu die Lage der Schichtnamen im Überblick. Hält die Bildschleife
-// an; auf der Seite selbst ungenutzt.
-export function standbild(s, t, kante, stufe, format, qualitaet) {
+// Ecken außerhalb des Kreises schwarz, dazu die Lage der Schichtnamen im Überblick. welle (nur für die Schleife
+// der Bildfolge): eigene Zeit für das Winken im Hero, t führt dann die langsamen Bewegungen (szeneStart in
+// szenen.js). Hält die Bildschleife an; auf der Seite selbst ungenutzt.
+export function standbild(s, t, kante, stufe, format, qualitaet, welle) {
   if (!gebaut || !bereit || !bild || !bild.standbild) { return null; }
   standbildModus = true;
   stoppen();
   sGl = s;
   zeit = t;
   zustand(s);
-  var quelleBild = bild.standbild(Z, t, lay, kante, stufe);
+  var quelleBild = bild.standbild(Z, t, lay, kante, stufe, welle);
   var c = document.createElement("canvas");
   c.width = c.height = kante;
   var ctx = c.getContext("2d");

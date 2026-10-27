@@ -2,7 +2,7 @@
   Diagnose-Anzeige für thermup.de, nur mit ?diag in der Adresse (z. B. https://thermup.de/?diag).
 
   Zeigt unten links, was dieses Gerät aus der Seite macht: Gerät und Browser, welches Bild der Film im Kreis
-  zeigt (Echtzeit-3D oder Bildfolge) und warum, wie schnell die Seite lädt und wie viele Bilder pro Sekunde
+  zeigt (Echtzeit-3D oder Bildfolge) und warum, ob die Schleife im Hero läuft, wie schnell die Seite lädt und wie viele Bilder pro Sekunde
   sie gerade zeigt, auch beim Scrollen. „Kopieren“ legt alles als Text in die Zwischenablage, damit sich ein
   langsames Gerät genau beschreiben lässt. Es wird nichts gesendet oder gespeichert (die Seite darf per
   Sicherheitsrichtlinie auch gar nichts senden); ohne ?diag wird dieses Skript nie geladen.
@@ -121,11 +121,14 @@
 
   function laden() {
     var nav = performance.getEntriesByType("navigation")[0] || {};
-    var res = performance.getEntriesByType("resource"), kb = 0, bild = 0;
-    res.forEach(function (r) { kb += (r.transferSize || 0) / 1024; if (/\.webp(\?|$)/.test(r.name)) { bild++; } });
+    var res = performance.getEntriesByType("resource"), kb = 0, bild = 0, schleife = 0;
+    res.forEach(function (r) {
+      kb += (r.transferSize || 0) / 1024;
+      if (/\/f\d{3}\.webp(\?|$)/.test(r.name)) { bild++; } else if (/\/s\d{2}\.webp(\?|$)/.test(r.name)) { schleife++; }
+    });
     return "Laden: erste Inhalte " + (fcp === null ? "?" : fcp + " ms") + " | größtes Element " + (lcp === null ? "?" : lcp + " ms") +
       " | Seite geladen " + Math.round(nav.loadEventEnd || 0) + " ms | Film bereit " + (bereitNach === null ? "noch nicht" : bereitNach + " ms") +
-      "\nÜbertragen: " + Math.round(kb) + " kB in " + res.length + " Dateien (" + bild + " Bilder der Folge)";
+      "\nÜbertragen: " + Math.round(kb) + " kB in " + res.length + " Dateien (" + bild + " Bilder der Folge, " + schleife + " der Schleife)";
   }
 
   /* ---------------------------------------------------------------- Ausgabe */
@@ -138,6 +141,7 @@
     }).join(", ");
     return "Film: Quelle " + a("data-film-quelle") + " | Stufe " + a("data-film-stufe") + " | Grund " + a("data-film-grund") + " | Rechenfaktor " + a("data-film-faktor") + " | Dekodieren " + a("data-film-dekodieren") +
       " | an " + root.classList.contains("film-an") + " | bereit " + root.classList.contains("film-bereit") + " | Kanäle-Film " + root.classList.contains("kanalfilm") +
+      "\nSchleife im Hero: " + a("data-film-schleife") +
       "\nZeichenflächen: " + zeichen;
   }
   function aktualisieren() {

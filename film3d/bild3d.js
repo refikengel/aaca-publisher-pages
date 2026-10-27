@@ -88,7 +88,8 @@ export function baue(leinwand, stufe, fehler, optionen) {
     }
   }
 
-  function zeichne(Z, t, lay) {
+  // welle: nur für die Schleife der Bildfolge (eigene Zeit des Winkens, siehe szeneStart in szenen.js)
+  function zeichne(Z, t, lay, welle) {
     zeit = t;
     var j = Z.szene, sichtbarSzene = j >= 0 && Z.druck > 0.001;
     maschine.stellen(Z.idx, Z.auf);
@@ -97,7 +98,7 @@ export function baue(leinwand, stufe, fehler, optionen) {
     if (Z.j === 0 || Z.j === 7) { farbeJ.setHex(0xf2c14e); }
     if (sichtbarSzene) {
       var sz = szenen[j];
-      sz.tick(zeit, Z.u);
+      sz.tick(zeit, Z.u, welle);
       rob.haloAusrichten();
       var plattenY = (Z.idx - j) * ABSTAND;
       if (Z.druck < 0.999) {
@@ -265,11 +266,11 @@ export function baue(leinwand, stufe, fehler, optionen) {
     zeichne: zeichne,
     // Namen auf den Platten neu malen (Sprachwechsel, geladene Schrift)
     sprache: function () { if (maschine) { maschine.beschriftungMalen(); } },
-    // Bild für das Werkzeug der Bildfolge: zu Z rendern, das fertige Canvas zurück
-    standbild: function (Z, t, lay, kante, stufeWunsch) {
+    // Bild für das Werkzeug der Bildfolge: zu Z rendern, das fertige Canvas zurück (welle: siehe zeichne)
+    standbild: function (Z, t, lay, kante, stufeWunsch, welle) {
       if (welt.stufe !== stufeWunsch) { welt.setzeStufe(stufeWunsch); }
       welt.groesse(kante, 2);
-      zeichne(Z, t, lay);
+      zeichne(Z, t, lay, welle);
       return welt.renderer.domElement;
     },
     // Grafikspeicher freigeben und das Canvas entfernen (der Kontextverlust ist dann gewollt)

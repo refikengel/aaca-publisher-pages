@@ -13,8 +13,28 @@
   Speicher (je etwa 20 kB); dekodiert wird nur ein Fenster um die aktuelle Stelle, in Hilfsthreads
   (createImageBitmap, siehe VOR, ZURUECK und FENSTER unten), nicht im Hauptthread. Ohne fetch und createImageBitmap
   oder bei Fehlern lädt die Folge wie früher als <img>. Schnittstelle wie bild3d.js.
+
+  Dazu die Schleife des Hero (schleife-daten.js, assets/film/s00.webp …): der winkende Roboter an Scrollposition 0,
+  die haupt.js im Stand abspielt, so wie Echtzeit-3D dort von selbst weiterläuft. Geladen wird sie nur auf Wunsch
+  (schleifeLaden: die Folge bleibt das Bild), erst wenn jedes achte Bild der Folge da ist (der ganze Film lässt
+  sich dann schon scrollen), auch ihre Daten (dynamischer Import: wo Echtzeit-3D läuft, holt sie keiner, und ein
+  Fehler beim Laden trifft nur die Schleife), mit niedriger Priorität, zwei Dateien zugleich, nicht bei
+  „Datensparen“ und nicht bei sehr langsamem Netz (2G). Dekodiert sind wie bei der Folge nur wenige Bilder, in
+  Hilfsthreads: beim Abspielen die nächsten S_VORAUS, am Anfang die ersten, weit weg vom Anfang keines. Jede Datei
+  bekommt einen zweiten Versuch; scheitert auch der, ist die Schleife still aus, und die Folge läuft wie bisher.
 */
 import { FOLGE } from "./folge-daten.js?v=9";
+
+// Daten der Schleife (Anzahl, Dauer, Ordner) aus schleife-daten.js, für alle Folgen dieser Seite; der zweite Versuch
+// läuft unter eigener Adresse (ein gescheiterter Import bleibt unter seiner Adresse gemerkt)
+var schleifeDaten = null;
+function schleifeDatenHolen(nochmal) {
+  if (schleifeDaten) { return Promise.resolve(schleifeDaten); }
+  return import(nochmal ? "./schleife-daten.js?v=14&nochmal=1" : "./schleife-daten.js?v=14").then(function (m) {
+    schleifeDaten = m.SCHLEIFE;
+    return schleifeDaten;
+  });
+}
 
 var GLEICHZEITIG = 4;
 // als Überbrückung: so viele Bilder vor und hinter der aktuellen Stelle (16 Bilder je Bildschirmhöhe)
@@ -26,6 +46,8 @@ var NAHE = 8;
 // Hilfsthreads dekodiert, vor dem Zeichnen. Weiter weg liegen nur die kleinen Dateien (etwa 20 kB je Bild).
 // Geht das nicht (alter Browser, Fehler), lädt die Folge wie früher als <img>.
 var VOR = 10, ZURUECK = 5, FENSTER = 18, BITMAPS_GLEICH = 3;
+// Schleife des Hero: so viele Bilder ab dem gezeigten dekodiert halten (gut eine Drittelsekunde voraus)
+var S_VORAUS = 4;
 var KANN_BITMAP = typeof window.createImageBitmap === "function" && typeof window.fetch === "function" && typeof window.Blob === "function";
 
 // leinwand: ein eigenes, frisches Canvas; neuZeichnen(): ein Bild ist da, das besser passt; fehler(): Bilder
@@ -50,6 +72,122 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
   document.documentElement.setAttribute("data-film-dekodieren", nutzeBitmap ? "bitmap" : "bild");
 
   function adresse(k) { return FOLGE.ordner + "f" + ("00" + k).slice(-3) + ".webp"; }
+
+  // Schleife des Hero: blobs (Weg über Bitmaps) bzw. bilder (Weg über <img>) je Nummer, fertig = Zahl der geladenen,
+  // naechstes = nächste anzufragende, bitmaps = dekodierte (siehe schleifeVorwaermen), inArbeit = wird dekodiert,
+  // runde = zählt hoch, wenn der Weg wechselt (Antworten der alten Runde zählen dann nicht), gezeigt = zuletzt
+  // gezeichnetes Bild der Schleife (-1: im Canvas steht ein Bild zur Scrollposition), daten = 0 (nicht angefragt),
+  // 1 (lädt), 2 (da); SN = Zahl ihrer Bilder, sobald die Daten da sind
+  var SN = 0;
+  var sl = { blobs: [], bilder: [], bitmaps: [], inArbeit: [], fertig: 0, naechstes: 0, laufend: 0, bmJetzt: 0,
+    runde: 0, daten: 0, gewuenscht: false, gemeldet: false, fehler: false, gezeigt: -1 };
+  function schleifeAdresse(k) { return schleifeDaten.ordner + "s" + ("0" + k).slice(-2) + ".webp"; }
+  function netzGrund() {
+    var c = navigator.connection;
+    if (c && c.saveData) { return "Datensparen"; }
+    if (c && /^(slow-)?2g$/.test(c.effectiveType || "")) { return "langsames Netz"; }
+    return "";
+  }
+  // jedes achte Bild der Folge und das letzte da?
+  function grobDa() {
+    for (var k = 0; k < N; k += 8) { if (!fertig[k]) { return false; } }
+    return fertig[N - 1];
+  }
+  function schleifeHolen() {
+    if (aus || sl.fehler) { return; }
+    if (!sl.gewuenscht) {
+      // die Folge ist grob da: haupt.js einmal wecken, damit es die Schleife anfordern kann, wo sie gebraucht wird
+      if (!sl.gemeldet && grobDa()) { sl.gemeldet = true; neuZeichnen(); }
+      return;
+    }
+    if (netzGrund() || !grobDa()) { return; }
+    if (sl.daten < 2) { if (sl.daten === 0) { schleifeDatenLaden(false); } return; }
+    while (sl.laufend < 2 && sl.naechstes < SN) { schleifeDatei(sl.naechstes++); }
+  }
+  // die Daten der Schleife holen; scheitert das, nach anderthalb Sekunden ein zweiter Versuch, dann ist sie aus
+  function schleifeDatenLaden(nochmal) {
+    sl.daten = 1;
+    schleifeDatenHolen(nochmal).then(function (d) {
+      if (aus || sl.fehler) { return; }
+      SN = d.anzahl;
+      api.schleife = { anzahl: d.anzahl, dauer: d.dauer };
+      sl.daten = 2;
+      schleifeHolen();
+    }, function () {
+      if (aus || sl.fehler) { return; }
+      if (nochmal) { schleifeAus(); return; }
+      window.setTimeout(function () { if (!aus && !sl.fehler) { schleifeDatenLaden(true); } }, 1500);
+    });
+  }
+  // eine Datei der Schleife holen, mit niedriger Priorität: Bilder der Folge zur Scrollposition gehen vor. Schlägt
+  // sie fehl, nach anderthalb Sekunden ein zweiter Versuch (einzelne Aussetzer des Servers), erst dann ist sie aus
+  function schleifeDatei(k, nochmal) {
+    var runde = sl.runde;
+    sl.laufend++;
+    var ende = function (ok) {
+      sl.laufend--;
+      if (aus || sl.fehler) { return; }
+      if (runde !== sl.runde) { schleifeHolen(); return; }
+      if (!ok && !nochmal) {
+        window.setTimeout(function () { if (!aus && !sl.fehler && runde === sl.runde) { schleifeDatei(k, true); } }, 1500);
+        return;
+      }
+      if (!ok) { schleifeAus(); return; }
+      if (++sl.fertig === SN) { schleifeVorwaermen(0); neuZeichnen(); } else { schleifeHolen(); }
+    };
+    if (nutzeBitmap) {
+      window.fetch(schleifeAdresse(k), { priority: "low" }).then(function (r) {
+        if (!r.ok) { throw new Error("Status " + r.status); }
+        return r.blob();
+      }).then(function (b) { if (!aus && runde === sl.runde) { sl.blobs[k] = b; } ende(true); }, function () { ende(false); });
+      return;
+    }
+    var bild = new Image();
+    bild.decoding = "async";
+    if ("fetchPriority" in bild) { bild.fetchPriority = "low"; }
+    bild.onload = function () { if (!aus && runde === sl.runde) { sl.bilder[k] = bild; } ende(true); };
+    bild.onerror = function () { ende(false); };
+    bild.src = schleifeAdresse(k);
+  }
+  function schleifeBitmapsSchliessen() {
+    sl.bitmaps.forEach(function (bm) { if (bm && bm.close) { try { bm.close(); } catch (e) { /* egal */ } } });
+    sl.bitmaps = [];
+  }
+  // ein Fehler schaltet die Schleife still ab (haupt.js erfährt es über schleifeStand, die Folge läuft wie bisher)
+  function schleifeAus() {
+    sl.fehler = true;
+    schleifeBitmapsSchliessen();
+    sl.blobs = []; sl.bilder = [];
+    neuZeichnen();
+  }
+  // Bilder der Schleife ab k dekodiert halten: die nächsten S_VORAUS (k = 0: bereit für den Anfang), in Hilfsthreads,
+  // höchstens zwei zugleich; alle übrigen schließen (k < 0: alle, die Seite steht weit weg vom Anfang)
+  function schleifeVorwaermen(k) {
+    if (!nutzeBitmap || aus || sl.fehler || sl.daten < 2 || sl.fertig < SN) { return; }
+    for (var d = 0; k >= 0 && d < S_VORAUS && sl.bmJetzt < 2; d++) {
+      var j = (k + d) % SN;
+      if (!sl.bitmaps[j] && !sl.inArbeit[j]) { schleifeBitmap(j); }
+    }
+    for (var m = 0; m < SN; m++) {
+      if (sl.bitmaps[m] && (k < 0 || (m - k + SN) % SN >= S_VORAUS)) {
+        try { sl.bitmaps[m].close(); } catch (e) { /* egal */ }
+        sl.bitmaps[m] = null;
+      }
+    }
+  }
+  function schleifeBitmap(j) {
+    var runde = sl.runde;
+    sl.inArbeit[j] = true;
+    sl.bmJetzt++;
+    var fertigMit = function (bm) {
+      sl.inArbeit[j] = false;
+      sl.bmJetzt--;
+      if (aus || sl.fehler || !nutzeBitmap || runde !== sl.runde) { if (bm && bm.close) { bm.close(); } return; }
+      if (!bm) { schleifeAus(); return; }
+      sl.bitmaps[j] = bm;
+    };
+    window.createImageBitmap(sl.blobs[j]).then(fertigMit, function () { fertigMit(null); });
+  }
 
   // nächstes Bild zum Laden: auf der gröbsten noch offenen Ebene das zur aktuellen Stelle nächste
   // (als Überbrückung nur in der Nähe; die Ebenen fangen dann bei jeder Bewegung neu an)
@@ -96,6 +234,10 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
     for (var m = 0; m < N; m++) { bitmaps[m] = null; blobs[m] = null; if (!bilder[m]) { fertig[m] = false; angefragt[m] = false; } }
     gezeichnet.a = -1;
     laden();
+    // die Schleife ebenso: was als Datei geladen war, kommt neu als <img> (aus dem Zwischenspeicher)
+    schleifeBitmapsSchliessen();
+    sl.runde++; sl.blobs = []; sl.fertig = 0; sl.naechstes = 0; sl.gezeigt = -1;
+    schleifeHolen();
   }
 
   // eine Datei als Blob holen (Weg über Bitmaps)
@@ -113,6 +255,7 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
         return;
       }
       laden();
+      schleifeHolen();
     };
     window.fetch(adresse(k)).then(function (r) {
       if (!r.ok) { throw new Error("Status " + r.status); }
@@ -175,6 +318,7 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
         return;
       }
       laden();
+      schleifeHolen();
     };
     // nicht vorab dekodieren (img.decode()): das läuft im Hauptthread (am Rechner etwa 4 ms je Bild, auf einem
     // Handy leicht das Fünffache), für alle Bilder der Folge gleich nach dem Laden der Seite, und der Browser
@@ -221,6 +365,8 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
     letztePos = p;
     etiketten(Z, p, lay);
     vorwaermen();
+    // die Schleife beginnt immer mit ihrem ersten Bild: nahe am Anfang die ersten dekodiert halten, sonst keines
+    schleifeVorwaermen(p < FENSTER ? 0 : -1);
     var a = naechstesFertiges(Math.floor(p), -1), b = naechstesFertiges(Math.ceil(p), 1);
     if (a < 0) { laden(); return; }
     if (b < 0) { b = a; }
@@ -230,6 +376,7 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
     // nur zeichnen, wenn sich etwas geändert hat (Bilder, Überblendung, Größe)
     if (a === gezeichnet.a && b === gezeichnet.b && Math.abs(w - gezeichnet.w) < 0.004 && breite === gezeichnet.breite) { laden(); return; }
     gezeichnet = { a: a, b: b, w: w, breite: breite };
+    sl.gezeigt = -1;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.globalAlpha = 1;
@@ -242,7 +389,7 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
     laden();
   }
 
-  return {
+  var api = {
     art: "folge",
     leinwand: leinwand,
     dauerlauf: false,
@@ -253,7 +400,7 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
     // mehr Pixel als das Bild hat bringen keine Schärfe, nur Arbeit; die Bilder werden dabei weich skaliert
     groesse: function (kante, pixeldichte) {
       var px = Math.max(1, Math.min(FOLGE.kante, Math.round(kante * Math.max(1, Math.min(pixeldichte || 1, 3)))));
-      if (leinwand.width !== px) { leinwand.width = leinwand.height = px; gezeichnet.a = -1; }
+      if (leinwand.width !== px) { leinwand.width = leinwand.height = px; gezeichnet.a = -1; sl.gezeigt = -1; }
     },
     // bereit (true), sobald das Bild an der aktuellen Stelle da ist; danach lädt der Rest im Hintergrund.
     // Läuft der Film nicht mehr (nochAn), gleich false.
@@ -301,14 +448,41 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
     vollLaden: function () { if (nurNahe) { nurNahe = false; feinste = datensparen ? 4 : 1; laden(); } },
     zeichne: zeichne,
     sprache: function () {},
+    // Schleife des Hero (siehe oben): Anzahl und Dauer (sobald ihre Daten da sind), laden auf Wunsch, Stand für
+    // haupt.js und data-film-schleife
+    schleife: null,
+    schleifeLaden: function () { sl.gewuenscht = true; schleifeHolen(); },
+    schleifeStand: function () {
+      if (sl.fehler) { return "Ladefehler"; }
+      if (sl.daten === 2 && sl.fertig === SN) { return "bereit"; }
+      return netzGrund() || (sl.gewuenscht ? "lädt" : "nicht geladen");
+    },
+    // Bild k der Schleife zeigen, sobald es dekodiert ist (sonst bleibt das vorige stehen); nichts tun, wenn es schon
+    // im Canvas steht; dann die nächsten dekodieren lassen
+    schleifeZeichnen: function (k) {
+      var b = nutzeBitmap ? sl.bitmaps[k] : sl.bilder[k];
+      if (b && k !== sl.gezeigt) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.globalAlpha = 1;
+        ctx.drawImage(b, 0, 0, leinwand.width, leinwand.height);
+        sl.gezeigt = k;
+        // das nächste Bild zur Scrollposition wird wieder gezeichnet, auch an derselben Stelle
+        gezeichnet.a = -1;
+      }
+      schleifeVorwaermen(k);
+    },
     // nichts mehr laden, Bilder loslassen, Canvas entfernen
     freigeben: function () {
       aus = true;
       bilder = [];
+      schleifeBitmapsSchliessen();
+      sl.blobs = []; sl.bilder = [];
       bitmaps.forEach(function (b) { if (b && b.close) { try { b.close(); } catch (e) { /* egal */ } } });
       bitmaps = []; blobs = [];
       fertig = fertig.map(function () { return false; });
       if (leinwand.parentNode) { leinwand.parentNode.removeChild(leinwand); }
     }
   };
+  return api;
 }

@@ -36,11 +36,13 @@ export function szeneStart(k) {
   return {
     j: 0, gruppe: gruppe, oben: 3.0, symbol: 0,
     platz: { x: 0, z: 0.15, dreh: 0 },
-    tick: function (t) {
+    // welle: nur für die Schleife der Bildfolge (_werkzeuge/bildfolge_rendern.mjs --schleife): eigene Zeit für
+    // Winken und Blinzeln, t führt dann die langsamen Bewegungen hin und zurück; sonst gilt t für alles
+    tick: function (t, u, welle) {
       var rob = k.rob, g = rob.g;
-      rob.leben(t);
+      rob.leben(t, welle);
       // Winken in Schüben: 2 Sekunden winken, 1,6 Sekunden Pause; Heben und Senken fließend
-      var z = t % 3.6, w = weich(seg(z, 0, 0.45)) * (1 - weich(seg(z, 2.0, 2.65)));
+      var z = (welle === undefined ? t : welle) % 3.6, w = weich(seg(z, 0, 0.45)) * (1 - weich(seg(z, 2.0, 2.65)));
       var osz = Math.sin(z * 7.5) * weich(seg(z, 0.3, 0.6)) * (1 - weich(seg(z, 1.85, 2.15)));
       // der Oberkörper geht beim Winken leicht mit (Gewicht auf die andere Seite)
       g.torso.rotation.set(0.03, Math.sin(t * 0.7) * 0.08 - w * 0.06, Math.sin(t * 0.5) * 0.02 + w * 0.035);

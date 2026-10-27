@@ -498,15 +498,16 @@ export class Roboter {
 
   /* ------------------------------------------------------- Leben im Leerlauf */
 
-  // Schweben, Heiligenschein, Blinzeln; zeit in Sekunden
-  leben(zeit) {
+  // Schweben, Heiligenschein, Blinzeln; zeit in Sekunden. welle: nur für die Schleife der Bildfolge (siehe
+  // szeneStart in szenen.js), dann blinzelt der Roboter einmal je Schleife von 3,6 Sekunden
+  leben(zeit, welle) {
     var g = this.g;
     g.basis.position.y = 0.22 + Math.sin(zeit * 1.7) * 0.022 + Math.sin(zeit * 0.63) * 0.01;
     g.basis.rotation.z = Math.sin(zeit * 0.9) * 0.012;
     this.haloDreh = zeit * 0.35;
     g.halo.position.y = 0.52 + Math.sin(zeit * 1.3 + 1.0) * 0.012;
     // alle 3,7 Sekunden ein kurzes Blinzeln
-    var b = (zeit % 3.7) / 3.7, offen = 1;
+    var b = welle === undefined ? (zeit % 3.7) / 3.7 : (welle % 3.6) / 3.6, offen = 1;
     if (b > 0.94) { offen = Math.abs(Math.cos((b - 0.94) / 0.06 * Math.PI)); }
     this.blinzeln = offen;
     g.schub.material.emissiveIntensity = 2.2 + Math.sin(zeit * 11.0) * 0.18 + Math.sin(zeit * 7.3) * 0.14;
