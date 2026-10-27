@@ -1911,6 +1911,30 @@ html.kanalfilm .kanal-hinweis {
   html.kanalfilm .kanal-zeile { display: none; }
 }
 
+/* Volle Höhe auf Handys mit einfahrender Adressleiste. Die feste Bühne (Film und Kanäle) war nur so hoch wie der
+   kleine Bildschirm (svh, Leiste sichtbar). Fährt die Leiste beim Wischen ein, wird der Bildschirm größer, und unter
+   der Bühne blieb ein Streifen der Seite stehen: der Glanz am Horizont und die farbigen Szenen brachen unten hart ab.
+   Jetzt ist die Bühne so hoch wie der große Bildschirm (lvh, Leiste eingefahren) und füllt ihn immer ganz; bei
+   sichtbarer Leiste ragt sie unten um deren Höhe über den Rand. --unten ist dieser Überstand (am Rechner 0): was unten
+   verankert ist (Überspringen-Link, Startzeichen, Text im Hochformat, Hinweis der Kanäle), rückt um ihn nach oben und
+   bleibt so immer sichtbar. Die Scroll-Strecke rechnet ebenfalls in lvh, damit Bühne und Strecke zusammenpassen
+   (haupt.js und kanaele.js messen die Höhe der Bühne selbst). Browser ohne lvh behalten die bisherigen Werte. */
+@supports (height: 100lvh) {
+  html.film-an .film { height: calc(var(--film-s, 9.4) * 100lvh); }
+  html.film-an .buehne {
+    height: 100lvh;
+    --unten: calc(100lvh - 100svh);
+    --faden-b: calc(clamp(1.3rem, 3.6svh, 2.4rem) + var(--unten));
+  }
+  html.kanalfilm .kanalfilm { height: calc(var(--kf-s, 6.4) * 100lvh); }
+  html.kanalfilm .kanal-buehne { height: 100lvh; --unten: calc(100lvh - 100svh); }
+  html.kanalfilm .kanal-hinweis { bottom: calc(1.4rem + var(--unten, 0px)); }
+  @media (max-aspect-ratio: 11/10) {
+    html.kanalfilm .kanal,
+    html.kanalfilm .kanal:visited { bottom: calc(1.3rem + var(--unten, 0px)); }
+  }
+}
+
 .panel {
   max-width: 50rem;
   margin: 1.2rem 0;

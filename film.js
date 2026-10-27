@@ -79,7 +79,7 @@
     root.classList.add("film-an");
     knopfAnpassen();
     try {
-      import("./film3d/haupt.js?v=11").then(function (m) {
+      import("./film3d/haupt.js?v=12").then(function (m) {
         modul = m;
         m.start({ erzwungen: erzwungen, reduziertAus: reduziertAus, folgeAufTouch: BILDFOLGE_AUF_TOUCH, weichesRad: WEICHES_SCROLLEN });
       }, function () { geladen = false; ausGrund = "fehler"; zurueck(); knopfAnpassen(); });

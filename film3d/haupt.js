@@ -549,7 +549,7 @@ function vorbereitungLaufen(k) {
   // Wischen soll dabei nicht stocken
   var mitRuhe = k.art === "3d" && !!bild;
   var holen = (mitRuhe && !k.modul ? scrollpause() : Promise.resolve()).then(function () {
-    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=11"));
+    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=12"));
   });
   holen.then(function (m) {
     k.modul = m;
