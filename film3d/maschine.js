@@ -8,9 +8,12 @@ import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoundedBoxGeometry } from "../vendor/three/addons/geometries/RoundedBoxGeometry.js";
 import { stoffFest as stoff, riefenTextur, malTextur, buerstTextur, rauheitTextur } from "./stoff.js";
 import { namen, SCHRIFT, ZIFFERN } from "./sprache.js";
+import { FARBEN, farbeVon } from "./farben.js";
+
+// die Farben der Stationen stehen in farben.js (ohne three.js); hier weitergereicht für die Szenen
+export { FARBEN, farbeVon };
 
 const N_SCHICHTEN = 8;
-export const FARBEN = [0xf2c14e, 0xf08a4b, 0xe85d75, 0x9280f0, 0x3fcf86, 0x4fb3f0];
 export const PLATTE_R = 1.9;
 export const ABSTAND = 2.7;
 
@@ -23,8 +26,6 @@ function netz(geo, st, schatten) {
   m.receiveShadow = true;
   return m;
 }
-
-export function farbeVon(j) { return j >= 1 && j <= 6 ? FARBEN[j - 1] : 0xf2c14e; }
 
 // Zahnrad als extrudierter Umriss
 function zahnradGeo(r, zaehne, dicke) {

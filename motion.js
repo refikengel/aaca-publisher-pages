@@ -89,7 +89,9 @@
     [".weg .station", ".kanaele li", ".fakten li"].forEach(function (sel) {
       [].forEach.call(document.querySelectorAll(sel), function (el, i) { el.style.setProperty("--i", String(i % 6)); });
     });
-    if (!("IntersectionObserver" in window)) { [].forEach.call(koepfe, function (h) { h.classList.add("sichtbar"); }); return; }
+    // ohne Bewegung (Bewegung reduzieren, Pause) steigen die Wörter nicht: dann gleich alle sichtbar, ohne Beobachter
+    // (er rechnete sonst beim Scrollen in jedem Bild mit)
+    if (!erlaubt() || !("IntersectionObserver" in window)) { [].forEach.call(koepfe, function (h) { h.classList.add("sichtbar"); }); return; }
     var beob = new IntersectionObserver(function (eintraege) {
       eintraege.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("sichtbar"); beob.unobserve(e.target); } });
     }, { rootMargin: "0px 0px -12% 0px", threshold: 0.2 });

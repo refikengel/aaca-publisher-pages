@@ -66,16 +66,19 @@ export class Skala {
     ctx.lineCap = "round";
     ctx.strokeStyle = "rgba(255,248,230,0.16)"; ctx.lineWidth = Math.max(1, R * 0.012);
     ctx.beginPath(); ctx.arc(x, y, R * 0.965, PI * 1.08, PI * 1.42); ctx.stroke();
-    // Strichkranz (dreht gegenläufig)
+    // Strichkranz (dreht gegenläufig): je Strichart ein Pfad (zwei Aufrufe statt 120, gleiches Bild)
     var n = 120, d2 = -s * 0.3 - zeit * 0.01;
     ctx.lineCap = "butt";
-    for (i = 0; i < n; i++) {
-      var a = d2 + i * PI2 / n, lang = i % 10 === 0 ? 0.05 : (i % 5 === 0 ? 0.034 : 0.022);
-      ctx.strokeStyle = rgba(P.gold, i % 10 === 0 ? 0.6 : 0.3);
-      ctx.lineWidth = Math.max(1, R * (i % 10 === 0 ? 0.004 : 0.0025));
+    for (k = 0; k < 2; k++) {
       ctx.beginPath();
-      ctx.moveTo(x + Math.cos(a) * R * 1.035, y + Math.sin(a) * R * 1.035);
-      ctx.lineTo(x + Math.cos(a) * R * (1.035 - lang * 0.6), y + Math.sin(a) * R * (1.035 - lang * 0.6));
+      for (i = k === 0 ? 0 : 1; i < n; i += k === 0 ? 10 : 1) {
+        if (k === 1 && i % 10 === 0) { continue; }
+        var a = d2 + i * PI2 / n, lang = i % 10 === 0 ? 0.05 : (i % 5 === 0 ? 0.034 : 0.022);
+        ctx.moveTo(x + Math.cos(a) * R * 1.035, y + Math.sin(a) * R * 1.035);
+        ctx.lineTo(x + Math.cos(a) * R * (1.035 - lang * 0.6), y + Math.sin(a) * R * (1.035 - lang * 0.6));
+      }
+      ctx.strokeStyle = rgba(P.gold, k === 0 ? 0.6 : 0.3);
+      ctx.lineWidth = Math.max(1, R * (k === 0 ? 0.004 : 0.0025));
       ctx.stroke();
     }
     // Goldring

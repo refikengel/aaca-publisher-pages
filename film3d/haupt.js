@@ -1,63 +1,110 @@
 /*
-  Film für die Startseite von thermup.de (fünfte Fassung): der Weg eines Videos als Schichtmodell,
-  in Echtzeit gerendert (three.js, selbst gehostet, MIT-Lizenz).
+  Film für die Startseite von thermup.de: der Weg eines Videos als Schichtmodell im Kreis der Skala.
 
-  Ablauf in Bildschirmhöhen s: je Station Fahrt (der Stapel fährt eine Schicht weiter, ein Datenpaket
-  läuft an der Säule hinunter), Aufbau (ein Scanring baut die Szene von unten nach oben auf), Arbeit
-  (der Roboter führt die Tätigkeit der Station vor), Abbau. Die Skala mit den bunten Bögen zeigt den
+  Ablauf in Bildschirmhöhen s (fahrplan.js): je Station Fahrt (der Stapel fährt eine Schicht weiter, ein
+  Datenpaket läuft an der Säule hinunter), Aufbau (ein Scanring baut die Szene von unten nach oben auf),
+  Arbeit (der Roboter führt die Tätigkeit der Station vor), Abbau. Die Skala mit den bunten Bögen zeigt den
   Fortschritt. Was als Nächstes kommt, ist vorher nicht zu sehen.
 
-  Weiches Scrollen: Mausrad und Touchpad werden sanft nachgeführt (Prinzip wie Lenis), Tastatur,
-  Bildlaufleiste und Touch bleiben unverändert. Alles hier ist Zusatz: Ohne Skript, bei „Bewegung
-  reduzieren“, nach der Pause-Taste und auf Geräten ohne WebGL 2 bleibt die Seite eine normale,
-  vollständig lesbare Seite. Es wird nichts gespeichert, nichts gesendet und nichts nachgeladen.
+  Dieses Modul ist der Rahmen ohne three.js: Kopf, Kapiteltexte, Skala, Scrollen, Ein- und Ausschalten und
+  die Wahl des Bildes im Kreis. Das Bild liefert eine von zwei Quellen mit derselben Schnittstelle, jede mit
+  eigenem Canvas:
+    folge.js   vorberechnete Bildfolge (WebP): sofort da, braucht kaum Rechenleistung;
+    bild3d.js  Echtzeit-3D (three.js, selbst gehostet, MIT-Lizenz), Stufen 3 bis 0 (welt.js).
+  Zuerst zeigt der Kreis immer die Bildfolge. Schafft das Gerät Echtzeit-3D (grundFuerFolge, geprüft vor dem
+  Laden von three.js), wird es währenddessen in kleinen Schritten vorbereitet und übernimmt dann an derselben
+  Stelle (kurze Überblendung; bis dahin lädt die Folge nur Bilder nahe der aktuellen Stelle). Wird das
+  3D-Bild selbst auf Stufe 0 zu langsam oder fällt es aus, übernimmt wieder die Bildfolge. Abgeschaltet wird
+  der Film dabei nie; nur wenn auch die Bilder der Folge nicht ladbar sind, ist er aus.
 
-  Langsame Geräte: Der Film wird schrittweise leichter (Stufe 3 bis 0, siehe welt.js), statt sich
-  abzuschalten. Ohne Grafikbeschleunigung startet er gleich auf Stufe 0. Abgeschaltet wird wegen der
-  Bildrate nur, wenn auch Stufe 0 deutlich zu langsam ist; dann bietet film.js „Film trotzdem
-  starten“ an. Nach einem Klick darauf (erzwingen) läuft der Film auf Stufe 0 und schaltet sich
-  nicht mehr von selbst ab, nur für diesen Besuch.
+  Gedämpft (bei „Bewegung reduzieren“, Einstellung in film.js): dieselben Szenen, nur mit dem Scrollen
+  bewegt. Das Bild im Kreis ist dann die Bildfolge (auch wo Echtzeit-3D ginge; außer mit den Prüfadressen):
+  sie folgt nur der Scrollposition, und es gibt keinen Wechsel der Quelle. Nur wo ihre Bilder für einen großen
+  Kreis zu wenig Pixel haben (folgeScharf) und das Gerät 3D schafft, bleibt es bei Echtzeit-3D, ebenso nur mit
+  dem Scrollen bewegt. Dazu keine Dauerschleife, kein Nachgleiten und kein weiches Mausrad.
+
+  Weiches Scrollen: Mausrad und Touchpad werden sanft nachgeführt (Prinzip wie Lenis), Tastatur,
+  Bildlaufleiste und Touch bleiben unverändert. Alles hier ist Zusatz: Ohne Skript, bei erzwungenen Farben
+  und nach der Pause-Taste bleibt die Seite eine normale, vollständig lesbare Seite. Es wird nichts
+  gespeichert und nichts gesendet; nachgeladen werden nur eigene Dateien (Module, Bilder der Folge).
+
+  Für Prüfungen: ?film=folge nur die Bildfolge; ?film=3d Echtzeit-3D auch auf Touch- und schwachen Geräten
+  (mit Überbrückung wie sonst); ?film=nur3d gleich Echtzeit-3D ohne Überbrückung, auch mit Software-Grafik
+  (für das Werkzeug, das die Bildfolge rendert, und für Messungen).
 */
-import * as THREE from "../vendor/three/build/three.module.min.js";
 // geänderte Module mit Versionsangabe (wie haupt.js in film.js): nach einer Aktualisierung trifft so kein
-// zwischengespeichertes altes Modul auf das neue haupt.js
-import { Welt } from "./welt.js?v=8";
-import { grundstoffe, scan, scanSetzen } from "./stoff.js";
-import { Roboter } from "./roboter.js";
-import { Maschine, farbeVon, ABSTAND, FARBEN } from "./maschine.js";
-import { szeneStart, szeneThema, szeneSkript } from "./szenen.js";
-import { szeneStimme, szeneQuellen, szeneFreigabe, szeneKanaele, szeneZiel } from "./szenen2.js";
-import { Skala } from "./skala.js?v=8";
+// zwischengespeichertes altes Modul auf ein neues
+import { Skala } from "./skala.js?v=9";
 import { klemme, seg, weich } from "./helfer.js";
+import { FARBEN } from "./farben.js";
+import { MITTE, ENDE, ZEIT_JE_HOEHE, zustand as zustandRechnen } from "./fahrplan.js?v=10";
+import { FOLGE } from "./folge-daten.js?v=9";
 
 var root = document.documentElement;
-var PI = Math.PI;
 
 function mq(q) { return window.matchMedia ? window.matchMedia(q) : null; }
 var mqReduce = mq("(prefers-reduced-motion: reduce)");
 var mqForced = mq("(forced-colors: active)");
-var mqHoch = mq("(min-height: 36rem)");
 var mqHell = mq("(prefers-color-scheme: light)");
 var mqGrob = mq("(pointer: coarse)");
 
-// erzwungen: der Besucher hat „Film trotzdem starten“ geklickt; kaputt: echter Fehler (Kontextverlust,
-// Ausnahme), dann kein neuer Versuch; langsamAus: wegen zu niedriger Bildrate abgeschaltet
-var erzwungen = false, kaputt = false, langsamAus = false;
+// Einstellungen aus film.js (siehe dort): reduziertAus = bei „Bewegung reduzieren“ aus statt gedämpft,
+// folgeAufTouch = Touch-Geräte bekommen die Bildfolge statt Echtzeit-3D
+var reduziertAus = false, folgeAufTouch = true;
+// erzwungen: der Besucher hat „Film trotzdem starten“ geklickt; kaputt: der Film selbst ist ausgefallen
+// (Fehler im Skript, Bilder nicht ladbar), dann kein neuer Versuch bis zum Klick
+var erzwungen = false, kaputt = false;
+var pruef = (function () {
+  var m = /[?&]film=(folge|3d|nur3d)(?:&|#|$)/.exec(window.location.search);
+  return m ? m[1] : "";
+})();
+
+function gedaempft() { return !!(mqReduce && mqReduce.matches); }
+var GRUND_RUHIG = "Bewegung reduzieren";
 
 function moeglich() {
-  if (!window.requestAnimationFrame || typeof WebGL2RenderingContext === "undefined") { return false; }
-  if (kaputt) { return false; }
-  if (langsamAus && !erzwungen) { return false; }
-  if (mqReduce && mqReduce.matches && !erzwungen) { return false; }
+  if (!window.requestAnimationFrame || kaputt) { return false; }
   if (mqForced && mqForced.matches) { return false; }
-  if (mqHoch && !mqHoch.matches) { return false; }
+  if (reduziertAus && gedaempft() && !erzwungen) { return false; }
   return !root.classList.contains("ruhe");
 }
 
-// aktuelle Qualitätsstufe am Dokument (zur Fehlersuche und für Tests; ohne Wirkung auf die Gestaltung)
-function stufeMelden() { if (welt) { root.setAttribute("data-film-stufe", String(welt.stufe)); } }
+// Reichen die Bilder der Folge (FOLGE.kante, 720 Pixel) für diesen Kreis? Kreis in CSS-Pixeln mal Pixeldichte
+// (bis 3, wie folge.js); bis etwa 15 % hochskaliert ist kein Unterschied zu sehen. Das gilt auf allen Handys;
+// große Kreise (große Bildschirme, hohe Pixeldichte am Rechner) brauchen mehr Pixel.
+function folgeScharf() {
+  return lay.r * 2 * Math.min(Math.max(window.devicePixelRatio || 1, 1), 3) <= FOLGE.kante * 1.15;
+}
 
-function sanft(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+// Braucht dieses Gerät die Bildfolge statt Echtzeit-3D? Geprüft vor dem Laden von three.js, mit einer eigenen
+// kleinen Leinwand, die gleich wieder freigegeben wird. Leer: Echtzeit-3D; sonst der Grund (steht in
+// data-film-grund). Bei „Bewegung reduzieren“ die Bildfolge: sie bewegt sich nur mit dem Scrollen, und es gibt
+// keinen Wechsel der Quelle (keine Überblendung von selbst). Nur wo sie für den Kreis zu wenig Pixel hat und das
+// Gerät Echtzeit-3D schafft, bleibt es bei 3D, gedämpft (es bewegt sich ebenso nur mit dem Scrollen).
+function grundFuerFolge() {
+  if (pruef === "folge") { return "Prüfadresse"; }
+  if (folgeAufTouch && !pruef && mqGrob && mqGrob.matches) { return "Touch-Gerät"; }
+  if (gedaempft() && !pruef && folgeScharf()) { return GRUND_RUHIG; }
+  if (typeof WebGL2RenderingContext === "undefined") { return "kein WebGL 2"; }
+  if (pruef === "nur3d") { return ""; }
+  try {
+    var gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: true });
+    if (!gl) { return "keine schnelle Grafik"; }
+    var info = gl.getExtension("WEBGL_debug_renderer_info");
+    var name = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || "") : "";
+    var frei = gl.getExtension("WEBGL_lose_context");
+    if (frei) { frei.loseContext(); }
+    if (/swiftshader|llvmpipe|softpipe|basic render|software/i.test(name)) { return "Software-Grafik"; }
+  } catch (fehler) {
+    return "keine schnelle Grafik";
+  }
+  if (pruef === "3d") { return ""; }
+  var n = window.navigator || {};
+  if (n.hardwareConcurrency && n.hardwareConcurrency <= 2) { return "wenige Kerne"; }
+  if (n.deviceMemory && n.deviceMemory <= 2) { return "wenig Speicher"; }
+  return "";
+}
+
 function hexRgb(text, ersatz) {
   var mm = /^#([0-9a-f]{6})$/i.exec((text || "").trim());
   if (!mm) { return ersatz; }
@@ -66,32 +113,23 @@ function hexRgb(text, ersatz) {
 }
 function mix3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
 
-/* ------------------------------------------------------------------ Fahrplan */
-
-// Zeiten in Bildschirmhöhen. Je Schicht j mit Mitte c:
-//   Fahrt [c-0.8, c-0.5]  Aufbau [c-0.5, c-0.15]  Arbeit [c-0.15, c+0.35]  Abbau [c+0.35, c+0.8]
-// Die erste Fahrt ist länger (0,95 bis 1,85): Der Stapel fächert sich zum Schichtenmodell auf, alle acht
-// Schichten stehen beschriftet übereinander, dann fährt die Kamera in die erste Schicht hinein.
-var MITTE = [0.15, 2.35, 3.95, 5.55, 7.15, 8.75, 10.35, 11.95];
-var ENDE = 12.8;
-var N_SCHICHT = 8;
-var UEBERBLICK = [0.95, 1.85];
-function fahrtBeginn(j) { return j === 1 ? UEBERBLICK[0] : MITTE[j] - 0.8; }
-
 /* ------------------------------------------------------------------- Zustand */
 
-var film, buehne, leinwand3d, leinwand2d, anker, hero, heroText, heroCta;
-var kapitel = [];
-var an = false, gebaut = false, bereit = false, sichtbar = true, raf = 0, letzte = 0, zeit = 0;
+var film, buehne, leinwand2d, anker, hero, heroText, heroCta, sterne, gluehen, startZeichen, startRuht = null;
+var kapitel = [], mitSicht = [];
+var an = false, gebaut = false, bereit = false, sichtbar = true, raf = 0, letzte = 0, zeit = 0, leerlauf = 0;
 var W = 1, H = 1, dpr = 1, filmTop = 0, heroWeg = false, filmEnde = false;
 var lay = { x: 0, y: 0, r: 200 };
 var sGl = 0;
 var T = {}, P = {};
 var Z = {};
-var welt, st, rob, maschine, szenen = [], skala, kontext;
-var aktiveSzene = -1;
-var farbeTmp = new THREE.Color(), kamZiel = new THREE.Vector3();
+var skala;
+// Quellen des Bildes im Kreis (folge.js, bild3d.js): bild = die gezeigte; kommt = die nächste, die gerade
+// vorbereitet wird ({ art, quelle, laeuft }); geht = die vorige, die noch ausgeblendet wird ({ quelle, bis });
+// ziel = die beste Quelle für dieses Gerät; folgeKaputt = die Bilder der Folge ließen sich nicht laden
+var bild = null, kommt = null, geht = null, ziel = "", folgeKaputt = false;
 var qual = { summe: 0, n: 0, ueberspringen: 90, ab: 0, langsam: 0 };
+var standbildModus = false;
 
 function setze(el, name, wert) {
   var c = el.__w || (el.__w = {});
@@ -123,160 +161,67 @@ function messen() {
   W = buehne.clientWidth;
   H = buehne.clientHeight;
   if (!W || !H) { return; }
-  dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+  // die Skala in voller Pixeldichte bis 3 (Handys): feine Linien und die kleine Schrift im Überblick bleiben so
+  // scharf wie der Text daneben; sie kostet je Bild nur wenige Zeichenbefehle
+  dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
   filmTop = film.getBoundingClientRect().top + (window.pageYOffset || 0);
   var ar = anker.getBoundingClientRect(), br = buehne.getBoundingClientRect();
   lay.x = ar.left - br.left + ar.width / 2;
   lay.y = ar.top - br.top + ar.height / 2;
   lay.r = Math.max(60, ar.width / 2);
-  // leichte Stufe: auch die Skala mit einfacher Pixeldichte und ohne Goldstaub
-  skala.leicht = welt.stufe === 0;
-  skala.messen(W, H, skala.leicht ? 1 : dpr, lay);
-  welt.groesse(Math.round(ar.width), window.devicePixelRatio || 1);
+  // leichte Stufe und Bildfolge: die Skala ohne Goldstaub (scharf bleibt sie, sie kostet kaum Zeit)
+  skala.leicht = !bild || bild.stufe === 0 || bild.art === "folge";
+  skala.messen(W, H, dpr, lay);
+  var kante = Math.round(ar.width), dichte = window.devicePixelRatio || 1;
+  [bild, kommt && kommt.quelle, geht && geht.quelle].forEach(function (q) { if (q) { q.groesse(kante, dichte); } });
   film.style.setProperty("--film-s", String(ENDE + 1));
 }
 
-// Ablauf zur Scrollposition s: Lage des Stapels, welche Szene, wie weit aufgebaut
-function zustand(s) {
-  var j, c;
-  Z.s = s;
-  Z.auf = 0;
-  if (s < fahrtBeginn(1)) {
-    j = 0; c = MITTE[0];
-    Z.idx = 0; Z.fahrt = 0;
-  } else {
-    j = 1;
-    while (j < N_SCHICHT - 1 && s >= fahrtBeginn(j + 1)) { j++; }
-    c = MITTE[j];
-    var f0 = fahrtBeginn(j);
-    Z.fahrt = s < c - 0.5 ? seg(s, f0, c - 0.5) : 0;
-    if (j === 1 && s < c - 0.5) {
-      // Überblick: auffächern, halten, zusammenfahren; die eigentliche Fahrt liegt im letzten Teil
-      var p = Z.fahrt;
-      Z.auf = weich(seg(p, 0, 0.32)) * (1 - weich(seg(p, 0.62, 0.96)));
-      Z.idx = sanft(seg(p, 0.6, 1));
-      Z.paket = seg(p, 0.6, 1);
-    } else {
-      Z.idx = s < c - 0.5 ? (j - 1) + sanft(Z.fahrt) : j;
-      Z.paket = Z.fahrt;
-    }
-  }
-  if (j === 0) { Z.paket = 0; }
-  Z.j = j; Z.c = c;
-  if (j > 0 && s < c - 0.5) { Z.szene = -1; Z.druck = 0; }
-  else if (s < c - 0.15) { Z.szene = j; Z.druck = j === 0 ? 1 : seg(s, c - 0.5, c - 0.15); }
-  else if (s < c + 0.35 || j === N_SCHICHT - 1) { Z.szene = j; Z.druck = 1; }
-  else { Z.szene = j; Z.druck = 1 - seg(s, c + 0.35, c + 0.8); }
-  Z.u = seg(s, c - 0.5, c + 0.8);
-  Z.heroH = weich(seg(s, 0.3, 0.8));
-  Z.fort = klemme(s / MITTE[N_SCHICHT - 1], 0, 1);
-  Z.station = klemme(Z.idx, 0, 7);
-}
-
-/* ------------------------------------------------------------------- 3D-Bild */
-
-function szeneWechseln(j) {
-  if (j === aktiveSzene) { return; }
-  aktiveSzene = j;
-  for (var i = 0; i < szenen.length; i++) { szenen[i].gruppe.visible = i === j; }
-  if (j < 0) { rob.wurzel.visible = false; return; }
-  var sz = szenen[j];
-  maschine.platten[j].add(rob.wurzel);
-  rob.zuruecksetzen();
-  rob.wurzel.visible = true;
-  rob.wurzel.position.set(sz.platz.x, 0.07, sz.platz.z);
-  rob.wurzel.rotation.set(0, sz.platz.dreh, 0);
-  var f = farbeVon(j);
-  st.led.emissive.setHex(f);
-  rob.displayMalen(sz.symbol, f, 0);
-  welt.akzentLicht.color.setHex(f);
-  if (sz.aktiviert) { sz.aktiviert(); }
-}
-
-function kameraSetzen(s, fahrt, auf) {
-  var k = welt.kamera;
-  auf = auf || 0;
-  var hebung = Math.sin(fahrt * PI) * (1 - auf);
-  var gier = Math.sin(s * 0.8) * 0.17 * (1 - auf * 0.6) + Math.sin(zeit * 0.13) * 0.025 + auf * 0.32;
-  var hoehe = 0.27 + hebung * 0.07 + auf * 0.2 + Math.sin(zeit * 0.21) * 0.006;
-  var abstand = 11.6 + hebung * 1.4 + auf * 15.5;
-  // im Überblick blickt die Kamera auf die Mitte des aufgefächerten Stapels
-  var mitteY = (1.15 - hebung * 0.35) * (1 - auf) + auf * ((maschine.idx - 3.5) * maschine.abstandJetzt() + 0.35);
-  // im Überblick rückt der Stapel etwas nach rechts, damit links Platz für die Beschriftung bleibt
-  var seitlich = -auf * 1.1;
-  k.position.set(seitlich + Math.sin(gier) * abstand * Math.cos(hoehe), mitteY + Math.sin(hoehe) * abstand, Math.cos(gier) * abstand * Math.cos(hoehe));
-  kamZiel.set(seitlich, mitteY, 0);
-  k.lookAt(kamZiel);
-}
-
-// Beschriftung der Schichten im Überblick: Bildschirmlage des linken Randes jeder Schicht
-var etikettPunkt = new THREE.Vector3();
-function etikettenRechnen() {
-  Z.etiketten = Z.etiketten || [];
-  if (Z.auf < 0.02) { Z.etiketten.length = 0; return; }
-  for (var j = 0; j < N_SCHICHT; j++) {
-    var p = maschine.platten[j];
-    etikettPunkt.set(-1.9, 0, 0.35);
-    p.localToWorld(etikettPunkt);
-    etikettPunkt.project(welt.kamera);
-    Z.etiketten[j] = { x: lay.x + etikettPunkt.x * lay.r, y: lay.y - etikettPunkt.y * lay.r, j: j };
-  }
-}
-
-function bild3d() {
-  var j = Z.szene, sichtbarSzene = j >= 0 && Z.druck > 0.001;
-  maschine.stellen(Z.idx, Z.auf);
-  szeneWechseln(sichtbarSzene ? j : -1);
-  var farbeJ = farbeTmp.setHex(farbeVon(Math.max(1, Math.min(6, Z.j))));
-  if (Z.j === 0 || Z.j === 7) { farbeJ.setHex(0xf2c14e); }
-  if (sichtbarSzene) {
-    var sz = szenen[j];
-    sz.tick(zeit, Z.u);
-    rob.haloAusrichten();
-    var plattenY = (Z.idx - j) * ABSTAND;
-    if (Z.druck < 0.999) {
-      var y = plattenY + 0.07 + Z.druck * sz.oben;
-      scanSetzen(y, 1, farbeJ);
-      maschine.scanZeigen(y, Math.min(1, Math.sin(Z.druck * PI) * 1.6 + 0.05), farbeJ, sz.oben, zeit);
-    } else {
-      scanSetzen(1000, 0);
-      maschine.scanZeigen(0, 0);
-    }
-  } else {
-    scanSetzen(1000, 0);
-    maschine.scanZeigen(0, 0);
-  }
-  maschine.paketZeigen(Z.paket, farbeJ, zeit);
-  welt.akzentLicht.intensity = sichtbarSzene ? 1.2 + (1 - Z.druck) * 2.5 : 0.4;
-  welt.staubStoff.uniforms.uStaerke.value = 0.6 + 0.4 * Math.sin(Z.fahrt * PI);
-  kameraSetzen(Z.s, Z.fahrt, Z.auf);
-  etikettenRechnen();
-  welt.render(zeit);
-}
+function zustand(s) { zustandRechnen(s, Z); }
 
 /* ---------------------------------------------------------------------- Text */
 
+// Die Werte kommen nur an die Elemente, die sie brauchen (Sterne und Glühen des Himmels, Standbild, Startzeichen,
+// Sprungmarke, Kapitel): jede Änderung lässt den Browser das Element samt allem darunter neu berechnen; an der
+// ganzen Bühne wäre das in jedem Bild die ganze Seite des Films mit allen geteilten Buchstaben.
+// In den Kapiteln lesen --in und --out die Zeilen des Texts und die Wörter der Titel (Stylesheet):
+var KAP_ZIELE = ".kap-text > *, .kap-titel .stueck";
 function domAbgleich(s) {
   var i, k, a, b;
   var h = Z.heroH;
   setze(heroText, "--h", zahl(h));
-  setze(hero, "--hout", zahl(weich(seg(s, 0.6, 0.95))));
   if (heroCta) {
     if (h > 0.85) { if (!heroCta.hasAttribute("inert")) { heroCta.setAttribute("inert", ""); } }
     else if (heroCta.hasAttribute("inert")) { heroCta.removeAttribute("inert"); }
   }
   var weg = h > 0.995;
   if (weg !== heroWeg) { heroWeg = weg; heroText.style.visibility = weg ? "hidden" : ""; }
-  setze(buehne, "--morgen", zahl(weich(seg(s, 0.6, MITTE[7]))));
-  setze(buehne, "--hoehe", zahl(s));
-  setze(buehne, "--sicht", zahl(weich(seg(s, 0.2, 0.8))));
+  var morgen = zahl(weich(seg(s, 0.6, MITTE[7])));
+  if (sterne) {
+    setze(sterne, "--morgen", morgen);
+    // gedämpft stehen die Sterne still (Stylesheet): dann braucht es die Höhe nicht, das spart ein Element je Bild
+    if (!gedaempft()) { setze(sterne, "--hoehe", zahl(s)); }
+  }
+  if (gluehen) { setze(gluehen, "--morgen", morgen); }
+  var sicht = zahl(weich(seg(s, 0.2, 0.8)));
+  for (i = 0; i < mitSicht.length; i++) { setze(mitSicht[i], "--sicht", sicht); }
+  // das Startzeichen ist nach dem Hero unsichtbar: dann ruht auch sein laufender Punkt (spart Arbeit je Bild)
+  var startWeg = +sicht >= 0.25;
+  if (startZeichen && startWeg !== startRuht) { startRuht = startWeg; startZeichen.classList.toggle("ruht", startWeg); }
   for (i = 0; i < kapitel.length; i++) {
     k = kapitel[i];
     a = weich(seg(s, k.ein[0], k.ein[1]));
     b = k.aus ? weich(seg(s, k.aus[0], k.aus[1])) : 0;
-    setze(k.el, "--in", zahl(a));
-    setze(k.el, "--out", zahl(b));
+    // nur Kapitel in ihrer Zeit bekommen neue Werte, und dort nur die Elemente, die sie lesen (KAP_ZIELE; als
+    // Zahlen ohne Vererbung, siehe Stylesheet): sonst rechnete der Browser je Bild das ganze Kapitel neu.
+    // Gesucht beim Einsatz des Kapitels: motion.js teilt die Titel in Wörter, unabhängig von diesem Modul.
     var da = a > 0.003 && b < 0.997;
+    // (gedämpft steigen die Wörter nicht, motion.js: dann nur die Zeilen)
+    if (da && !k.an) { k.ziele = [].slice.call(k.el.querySelectorAll(gedaempft() ? ".kap-text > *" : KAP_ZIELE)); }
+    if (da || k.an) {
+      var ai = zahl(a), bi = zahl(b);
+      for (var j = 0; j < k.ziele.length; j++) { setze(k.ziele[j], "--in", ai); setze(k.ziele[j], "--out", bi); }
+    }
     if (da !== k.an) { k.an = da; k.el.classList.toggle("an", da); }
   }
 }
@@ -287,7 +232,8 @@ function lies() { return (window.pageYOffset || root.scrollTop || 0); }
 var gleit = { aktiv: false, ziel: 0, ist: 0 };
 
 function radErlaubt(e) {
-  if (!an || e.ctrlKey || e.metaKey || e.defaultPrevented) { return false; }
+  // gedämpft: das Mausrad scrollt wie überall, ohne Nachgleiten
+  if (!an || gedaempft() || e.ctrlKey || e.metaKey || e.defaultPrevented) { return false; }
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { return false; }
   // eigene Bildlaufbereiche (z. B. ausgeklappte Inhalte) behalten ihr normales Verhalten
   var el = e.target;
@@ -321,30 +267,35 @@ function gleiten(dt) {
 
 function schleife(jetzt) {
   raf = 0;
-  if (!an || document.hidden) { return; }
+  if (!an || document.hidden || standbildModus) { return; }
   var dt = klemme((jetzt - letzte) / 1000, 0, 0.05), roh = (jetzt - letzte) / 1000;
   letzte = jetzt;
-  zeit += dt;
   gleiten(dt);
-  // Vorlauf (das 3D-Bild wird noch vorbereitet): Kopf, Texte und Skala folgen schon dem Scrollen
-  var vorlauf = gebaut && !bereit;
-  if (sichtbar && (bereit || vorlauf)) {
+  var ruhig = gedaempft(), weiter = false;
+  if (sichtbar) {
     kopfPruefen();
-    var ziel = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
-    var diff = ziel - sGl;
-    // große Sprünge (Links, Pos1/Ende) sofort, sonst eine leichte Annäherung (das Rad ist schon geglättet)
-    if (Math.abs(diff) > 2.5) { sGl = ziel; } else { sGl += diff * (1 - Math.exp(-dt / 0.06)); }
-    if (bereit) {
+    var ziel_ = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
+    var diff = ziel_ - sGl;
+    // große Sprünge (Links, Pos1/Ende) und gedämpft sofort, sonst eine leichte Annäherung (das Rad ist
+    // schon geglättet)
+    if (ruhig || Math.abs(diff) > 2.5) { sGl = ziel_; } else { sGl += diff * (1 - Math.exp(-dt / 0.06)); }
+    // Filmzeit: folgt der Stelle (wie die Bildfolge); nur ungedämpft läuft dazu die Zeit im Leerlauf weiter
+    if (!ruhig) { leerlauf += dt; }
+    zeit = sGl * ZEIT_JE_HOEHE + leerlauf;
+    if (bild) {
       zeichneBild();
-      qualitaet(jetzt, roh);
+      if (bild && bild.wachsam) { qualitaet(jetzt, roh); }
     } else {
       zeichneVorlauf();
     }
+    // Dauerschleife nur, solange sich von selbst etwas bewegt (3D ungedämpft, eine Überblendung); sonst
+    // weckt erst das Scrollen die Schleife wieder
+    weiter = !!(bild && bild.dauerlauf && !ruhig) || !!geht || Math.abs(ziel_ - sGl) > 0.0005;
   }
-  if (an && ((sichtbar && (bereit || vorlauf)) || gleit.aktiv)) { raf = window.requestAnimationFrame(schleife); }
+  if (an && ((sichtbar && weiter) || gleit.aktiv)) { raf = window.requestAnimationFrame(schleife); }
 }
 
-// im Vorlauf alles außer dem 3D-Bild; im Kreis steht bis dahin das Standbild
+// solange es noch kein Bild im Kreis gibt: alles außer dem Bild; dort steht bis dahin das Standbild
 function zeichneVorlauf() {
   try {
     zustand(sGl);
@@ -356,13 +307,16 @@ function zeichneVorlauf() {
   }
 }
 
-// Qualität an das Gerät anpassen. Gemessen wird die mittlere Bilddauer über Zeitfenster von etwa
-// 2,5 Sekunden (mindestens 20 Bilder, spätestens nach 5 Sekunden): über 1/40 s (unter etwa 40 Bildern
-// pro Sekunde) geht es eine Stufe leichter, bis zur leichten Stufe 0. Wegen der Bildrate abgeschaltet
-// wird nur noch, wenn auch Stufe 0 zweimal hintereinander unter etwa 13 Bildern pro Sekunde bleibt, und
-// nie, wenn der Besucher den Film selbst gestartet hat (Knopf „Film trotzdem starten“). Ein Bild zählt
-// höchstens 0,5 s: ein einzelner Hänger schaltet nicht ab, ein durchgehend extrem langsames Gerät schon.
+// Qualität an das Gerät anpassen (nur beim 3D-Bild). Gemessen wird die mittlere Bilddauer über Zeitfenster
+// von etwa 2,5 Sekunden (mindestens 20 Bilder, spätestens nach 5 Sekunden): über 1/40 s (unter etwa 40
+// Bildern pro Sekunde) geht es eine Stufe leichter, bis zur leichten Stufe 0. Übernehmen soll die
+// vorberechnete Bildfolge, wo sie besser ist (flüssiger und, auf Stufe 3 gerendert, auch schärfer): wenn zwei
+// Fenster hintereinander unter etwa 20 Bildern pro Sekunde liegen (auf jeder Stufe), auf Stufe 0 schon unter
+// etwa 30. Ein Bild zählt höchstens 0,5 s: ein einzelner Hänger zählt nicht als langsam. Gedämpft läuft die
+// Schleife nur beim Scrollen; gemessen wird dann nur das (ein neuer Anlauf setzt die Zeit zurück, siehe
+// starten).
 function qualitaet(jetzt, roh) {
+  if (kommt && kommt.art === "folge") { return; }   // der Wechsel zur Bildfolge läuft schon
   // den Anlauf nach dem Start und nach jedem Wechsel nicht mitzählen: 90 bzw. 30 Bilder, auf langsamen
   // Geräten höchstens 1,5 bzw. 0,5 Sekunden
   if (qual.ueberspringen > 0 && jetzt < qual.ab) { qual.ueberspringen--; return; }
@@ -370,17 +324,14 @@ function qualitaet(jetzt, roh) {
   if (qual.summe < 2.5 || (qual.n < 20 && qual.summe < 5)) { return; }
   var mittel = qual.summe / qual.n;
   qual.summe = 0; qual.n = 0;
-  if (welt.stufe > 0) {
-    if (mittel > 1 / 40) {
-      welt.setzeStufe(welt.stufe - 1); stufeMelden(); messen();
-      qual.ueberspringen = 30; qual.ab = jetzt + 500;
-    }
-    return;
-  }
-  if (mittel > 1 / 13) {
-    if (++qual.langsam >= 2 && !erzwungen) { langsamAus = true; ausschalten("langsam"); }
+  if (mittel > (bild.stufe > 0 ? 1 / 20 : 1 / 30)) {
+    if (++qual.langsam >= 2) { zurFolge("langsam"); return; }
   } else {
     qual.langsam = 0;
+  }
+  if (bild.stufe > 0 && mittel > 1 / 40) {
+    bild.setzeStufe(bild.stufe - 1); stufeMelden(); messen();
+    qual.ueberspringen = 30; qual.ab = jetzt + 500;
   }
 }
 
@@ -390,9 +341,20 @@ function kopfPruefen() {
 }
 
 function zeichneBild() {
+  zustand(sGl);
+  var q = bild, g = geht;
   try {
-    zustand(sGl);
-    bild3d();
+    q.zeichne(Z, zeit, lay);
+  } catch (fehler) {
+    ausgefallen(q);
+    return;
+  }
+  // die vorige Quelle zeichnet bis zum Ende der Überblendung mit (sonst stünde sie still, wenn gescrollt wird)
+  if (g) {
+    if (window.performance.now() > g.bis) { geht = null; g.quelle.freigeben(); }
+    else { try { g.quelle.zeichne(Z, zeit, lay); } catch (fehler) { ausgefallen(g.quelle); } }
+  }
+  try {
     skala.zeichne(Z, zeit, P);
     domAbgleich(sGl);
   } catch (fehler) {
@@ -412,189 +374,294 @@ function stoppen() {
   if (raf) { window.cancelAnimationFrame(raf); raf = 0; }
 }
 
-// gibt es schnelle Grafik? Ein kurzer Versuch auf einer eigenen Leinwand, die gleich wieder freigegeben
-// wird. So scheitert three.js nicht erst an der Leistungswarnung und schreibt keine Fehler in die Konsole.
-function schnelleGrafik() {
-  try {
-    var gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: true });
-    if (!gl) { return false; }
-    var frei = gl.getExtension("WEBGL_lose_context");
-    if (frei) { frei.loseContext(); }
-    return true;
-  } catch (fehler) {
-    return false;
-  }
-}
-
+// Seite: Bühne, Kreis, Kapitel und Skala (ohne das Bild im Kreis)
 function bauen() {
   film = document.getElementById("film");
   buehne = film && film.querySelector(".buehne");
   if (!buehne) { return false; }
-  leinwand3d = buehne.querySelector(".film-3d");
   leinwand2d = buehne.querySelector(".film-leinwand");
   anker = buehne.querySelector(".film-anker");
   hero = buehne.querySelector(".hero");
   heroText = buehne.querySelector(".hero-text");
   heroCta = buehne.querySelector(".hero-cta");
-  if (!leinwand3d || !leinwand2d || !anker || !hero || !heroText) { return false; }
+  sterne = buehne.querySelector(".himmel-sterne");
+  gluehen = buehne.querySelector(".himmel-gluehen");
+  if (!leinwand2d || !anker || !hero || !heroText) { return false; }
+  startZeichen = buehne.querySelector(".film-start");
+  mitSicht = [anker, startZeichen, buehne.querySelector(".film-skip")].filter(Boolean);
+  // das Canvas aus dem HTML ist nur der Platzhalter: jede Quelle legt ihr eigenes an (neueLeinwand)
+  var platz = buehne.querySelector(".film-3d");
+  if (platz) { platz.parentNode.removeChild(platz); }
   // Kapitel: der Überblick (eigene Zeiten), dann die sechs Stationen und das Ziel
   var els = buehne.querySelectorAll(".kap"), i;
   if (els.length !== 8) { return false; }
-  kapitel.push({ el: els[0], ein: [1.02, 1.3], aus: [1.55, 1.78], an: false });
+  kapitel.push({ el: els[0], ein: [1.02, 1.3], aus: [1.55, 1.78], an: false, ziele: [] });
   for (i = 1; i < 8; i++) {
     var c = MITTE[i];
-    kapitel.push({ el: els[i], ein: [c - 0.55, c - 0.15], aus: i === 7 ? null : [c + 0.38, c + 0.72], an: false });
+    kapitel.push({ el: els[i], ein: [c - 0.55, c - 0.15], aus: i === 7 ? null : [c + 0.38, c + 0.72], an: false, ziele: [] });
   }
-  // auf Wunsch des Besuchers gleich leicht; Touch-Geräte beginnen eine Stufe tiefer; ohne schnelle Grafik
-  // (Software-Grafik, gesperrter Treiber) gleich mit der leichten Stufe
-  var schnell = schnelleGrafik();
-  var stufe = (erzwungen || !schnell) ? 0 : (mqGrob && mqGrob.matches ? 2 : 3);
-  try {
-    welt = new Welt(leinwand3d, stufe, !schnell);
-  } catch (fehler) {
-    // die Vorprüfung war zu zuversichtlich: noch ein Versuch mit Software-Grafik
-    schnell = false;
-    welt = new Welt(leinwand3d, 0, true);
-  }
-  if (!schnell) { root.setAttribute("data-film-grafik", "software"); }
-  stufeMelden();
-  // Kontextverlust (Treiber neu gestartet, Speicher knapp): ehrlich abschalten statt ein leeres Bild zu zeigen
-  leinwand3d.addEventListener("webglcontextlost", function (e) {
-    e.preventDefault();
-    kaputt = true;
-    ausschalten("fehler");
-  });
-  st = grundstoffe();
-  maschine = new Maschine();
-  welt.szene.add(maschine.gruppe);
-  rob = new Roboter(st);
-  var schatten = welt.kontaktSchatten(1.3, 1.3, 0.75);
-  schatten.position.y = 0.004;
-  rob.wurzel.add(schatten);
-  kontext = { st: st, welt: welt, rob: rob, scanEbenen: [scan.ebene], scanUniforms: scan.uniforms };
-  szenen = [szeneStart(kontext), szeneThema(kontext), szeneSkript(kontext), szeneStimme(kontext),
-    szeneQuellen(kontext), szeneFreigabe(kontext), szeneKanaele(kontext), szeneZiel(kontext)];
-  for (i = 0; i < szenen.length; i++) { maschine.platten[i].add(szenen[i].gruppe); }
   skala = new Skala(leinwand2d);
   // die Sprungmarken im Film springen sofort, statt die ganze Fahrt abzuspielen
   var sprung = buehne.querySelectorAll(".film-skip, .hero-cta a[href^='#']");
   for (i = 0; i < sprung.length; i++) {
     sprung[i].addEventListener("click", function (e) {
-      var ziel = document.getElementById(this.getAttribute("href").slice(1));
-      if (ziel && an) { e.preventDefault(); gleit.aktiv = false; ziel.scrollIntoView({ behavior: "auto", block: "start" }); }
+      var ziel_ = document.getElementById(this.getAttribute("href").slice(1));
+      if (ziel_ && an) { e.preventDefault(); gleit.aktiv = false; ziel_.scrollIntoView({ behavior: "auto", block: "start" }); }
     });
   }
   gebaut = true;
   return true;
 }
 
-// alles unter wurzel sichtbar machen (three.js übersetzt und lädt nur, was sichtbar ist); liste merkt
-// sich, was vorher versteckt war, damit es danach wieder versteckt wird
-function allesZeigen(wurzel, liste) {
-  wurzel.traverse(function (o) { if (!o.visible) { o.visible = true; liste.push(o); } });
-}
-function wiederVerstecken(liste) {
-  for (var i = 0; i < liste.length; i++) { liste[i].visible = false; }
-  liste.length = 0;
+function fehlerAus() { kaputt = true; ausschalten("fehler"); }
+
+/* ------------------------------------------------------------ Quellen des Bildes */
+
+// alle Quellen freigeben (nach einem Ausfall des Films: Grafikspeicher und Bilder nicht länger halten)
+function alleFreigeben() {
+  [bild, kommt && kommt.quelle, geht && geht.quelle].forEach(function (q) { if (q) { q.freigeben(); } });
+  bild = null; kommt = null; geht = null; bereit = false;
 }
 
-// alle Shader und Texturen vorab vorbereiten, damit beim ersten Erscheinen einer Szene nichts ruckelt
-// (auch Teile, die erst später im Ablauf auftauchen, etwa die Etagen der Kiste in der Freigabe)
-function vorbereiten() {
-  var i, versteckt = [];
-  for (i = 0; i < szenen.length; i++) { szenen[i].gruppe.visible = true; allesZeigen(szenen[i].gruppe, versteckt); }
-  maschine.scanner.visible = true;
-  maschine.paket.visible = true;
-  maschine.schienen.forEach(function (s) { s.schiene.visible = s.schlitten.visible = true; });
-  for (i = 0; i < maschine.platten.length; i++) { maschine.platten[i].visible = true; }
-  // Shader passend zu den Schnittebenen übersetzen (siehe welt.uebersetzen): die Szenen und der Roboter mit
-  // dem Scan, das Skript-Blatt zusätzlich mit seiner Kante, alles Übrige ohne. Früher passten die meisten
-  // Shader nicht und wurden beim ersten Bild jeder Szene nachübersetzt (auf dem Desktop rund 7 Sekunden).
-  // Die häufigste Fassung (eine Ebene) kommt zuletzt: auf sie wartet compileAsync.
-  var mitScan = szenen.map(function (sz) { return sz.gruppe; }).concat([rob.wurzel]);
-  var fertig = welt.uebersetzen([
-    { ebenen: [], wurzeln: [welt.szene] },
-    { ebenen: [scan.ebene, scan.ebene], wurzeln: [szenen[2].gruppe] },
-    { ebenen: [scan.ebene], wurzeln: mitScan }
-  ], welt.kamera);
-  return fertig.then(function () {
-    wiederVerstecken(versteckt);
-    // je Szene einmal rendern (lädt Texturen und Instanzdaten hoch, baut Schattenshader)
-    return new Promise(function (aufgeloest) {
-      var j = 0;
-      function weiter() {
-        if (!an) { aufgeloest(); return; }
-        if (j < szenen.length) {
-          aktiveSzene = -2;
-          maschine.stellen(j);
-          szeneWechseln(j);
-          szenen[j].tick(0.5, 0.5);
-          allesZeigen(szenen[j].gruppe, versteckt);
-          scanSetzen(0.07 + szenen[j].oben * 0.5, 1, farbeTmp.setHex(farbeVon(Math.max(1, Math.min(6, j)))));
-          maschine.scanZeigen(1, 1, farbeTmp, szenen[j].oben, 0);
-          maschine.paketZeigen(0.5, farbeTmp, 0);
-          kameraSetzen(MITTE[j], 0, 0);
-          welt.render(0);
-          wiederVerstecken(versteckt);
-          j++;
-          window.requestAnimationFrame(weiter);
-          return;
-        }
-        aktiveSzene = -2;
-        szeneWechseln(-1);
-        scanSetzen(1000, 0);
-        aufgeloest();
-      }
-      window.requestAnimationFrame(weiter);
-    });
+// aktuelle Quelle und Qualitätsstufe am Dokument (zur Fehlersuche und für Tests; ohne Wirkung auf die Gestaltung)
+function stufeMelden() {
+  if (bild) {
+    root.setAttribute("data-film-quelle", bild.art);
+    root.setAttribute("data-film-stufe", String(bild.stufe));
+  }
+}
+
+// wie lange (ms) zuletzt nicht gescrollt wurde, und ein Promise auf die nächste Pause von mindestens 250 ms
+var zuletztGescrollt = -1e9;
+function ruhe() { return window.performance.now() - zuletztGescrollt; }
+function scrollpause() {
+  return new Promise(function (fertig) {
+    (function pruefen() { if (ruhe() >= 250) { fertig(); } else { window.setTimeout(pruefen, 120); } })();
   });
+}
+
+// ein eigenes Canvas für eine Quelle (ein Canvas kann nur eine Art Kontext haben); es liegt über den
+// bisherigen und unter der Skala und bleibt unsichtbar (wartet), bis die Quelle gezeigt wird
+function neueLeinwand() {
+  var c = document.createElement("canvas");
+  c.className = "film-3d wartet";
+  c.setAttribute("aria-hidden", "true");
+  buehne.insertBefore(c, leinwand2d);
+  return c;
+}
+
+// Was soll als Nächstes vorbereitet werden? Ohne Bild: die Bildfolge (oder gleich 3D, wenn die Folge nicht
+// geht); mit der Bildfolge auf einem 3D-fähigen Gerät: Echtzeit-3D im Hintergrund.
+function weiterschalten() {
+  if (!an || !gebaut) { return; }
+  if (!ziel) {
+    var grund = grundFuerFolge();
+    ziel = grund ? "folge" : "3d";
+    if (grund) { root.setAttribute("data-film-grund", grund); }
+  }
+  if (!bild) {
+    if (ziel === "3d" && (pruef === "nur3d" || folgeKaputt)) { vorbereiten("3d"); }
+    else if (!folgeKaputt) { vorbereiten("folge"); }
+    else { fehlerAus(); }
+    return;
+  }
+  if (bild.art === "folge" && ziel === "3d") { vorbereiten("3d"); }
+}
+
+function vorbereiten(art) {
+  if (kommt && kommt.art === art) {
+    // schon unterwegs; nach einer Pause dort weitermachen, wo die Vorbereitung angehalten hat
+    if (!kommt.laeuft) { vorbereitungLaufen(kommt); }
+    return;
+  }
+  if (kommt) { verwerfen(kommt); }
+  kommt = { art: art, quelle: null, laeuft: false, modul: null };
+  vorbereitungLaufen(kommt);
+}
+
+function verwerfen(k) {
+  if (kommt === k) { kommt = null; }
+  if (k.quelle) { k.quelle.freigeben(); }
+}
+
+function vorbereitungLaufen(k) {
+  k.laeuft = true;
+  var weiterMachen = function () { return an && kommt === k; };
+  // läuft schon ein Bild (die Bildfolge), arbeitet die Vorbereitung von Echtzeit-3D nur in Scrollpausen: das
+  // Laden von three.js, das Anlegen des Grafikkontexts und jeder ihrer Schritte kostet einen Augenblick, das
+  // Wischen soll dabei nicht stocken
+  var mitRuhe = k.art === "3d" && !!bild;
+  var holen = (mitRuhe && !k.modul ? scrollpause() : Promise.resolve()).then(function () {
+    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=10"));
+  });
+  holen.then(function (m) {
+    k.modul = m;
+    return mitRuhe && !k.quelle ? scrollpause() : null;
+  }).then(function () {
+    var m = k.modul;
+    if (kommt !== k) { return false; }
+    if (!k.quelle) {
+      var leinwand = neueLeinwand();
+      try {
+        if (k.art === "3d") {
+          k.quelle = m.baue(leinwand, mqGrob && mqGrob.matches ? 2 : 3, function () { ausgefallen(k.quelle); },
+            { softwareErlaubt: pruef === "nur3d" });
+        } else {
+          k.quelle = m.baue(leinwand, function () { if (an) { starten(); } }, function () { ausgefallen(k.quelle); },
+            { nurNahe: ziel === "3d" });
+        }
+      } catch (fehler) {
+        leinwand.parentNode.removeChild(leinwand);
+        throw fehler;
+      }
+      if (an) { messen(); }
+    }
+    return k.quelle.vorbereiten(weiterMachen, function () { return sGl; }, mitRuhe ? ruhe : null);
+  }).then(function (fertig) {
+    k.laeuft = false;
+    if (kommt !== k || !fertig || !an) { return; }
+    zeigen(k);
+  }).then(null, function () {
+    k.laeuft = false;
+    if (kommt !== k) { return; }
+    verwerfen(k);
+    gescheitert(k.art);
+  });
+}
+
+// die vorbereitete Quelle übernimmt; die bisherige blendet darunter aus und wird danach freigegeben
+function zeigen(k) {
+  kommt = null;
+  var q = k.quelle, vorher = bild;
+  bild = q;
+  // das erste Bild: wer gleich losscrollt, soll nicht von der Vorbereitung von Echtzeit-3D gebremst werden
+  // (sie beginnt erst nach einer ersten Ruhepause, siehe scrollpause)
+  if (!vorher) { zuletztGescrollt = window.performance.now(); }
+  if (vorher) {
+    if (geht) { geht.quelle.freigeben(); }
+    // so lange wie die Überblendung im Stylesheet (gedämpft kürzer), mit etwas Spielraum
+    geht = { quelle: vorher, bis: window.performance.now() + (gedaempft() ? 400 : 1100) };
+  }
+  // die neue Zeit im Leerlauf beginnt bei null: das erste 3D-Bild gleicht dem Bild der Folge an derselben Stelle
+  if (vorher && vorher.art === "folge" && q.art === "3d") { leerlauf = 0; }
+  q.leinwand.classList.remove("wartet");
+  stufeMelden();
+  if (q.art === "folge" && ziel === "folge" && q.vollLaden) { q.vollLaden(); }
+  messen();
+  // gleich das erste Bild an der aktuellen Stelle (nicht erst mit dem nächsten Scrollen)
+  if (sichtbar) {
+    sGl = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
+    zeit = sGl * ZEIT_JE_HOEHE + leerlauf;
+    zeichneBild();
+  }
+  bereitMelden();
+  weiterschalten();
+}
+
+// eine Quelle lässt sich nicht (mehr) vorbereiten: 3D geht nicht, dann bleibt es bei der Bildfolge;
+// die Bildfolge geht nicht, dann 3D, falls möglich, sonst ist der Film aus
+function gescheitert(art) {
+  if (art === "3d") {
+    ziel = "folge";
+    root.setAttribute("data-film-grund", "3D nicht möglich");
+    if (bild && bild.art === "folge" && bild.vollLaden) { bild.vollLaden(); }
+  } else {
+    folgeKaputt = true;
+  }
+  weiterschalten();
+}
+
+// eine Quelle fällt mitten im Film aus (Kontextverlust, Bilder nicht mehr ladbar, Fehler beim Zeichnen)
+function ausgefallen(q) {
+  if (!q) { return; }
+  if (geht && geht.quelle === q) { geht = null; q.freigeben(); return; }
+  if (kommt && kommt.quelle === q) { var k = kommt; verwerfen(k); gescheitert(k.art); return; }
+  if (q !== bild) { return; }
+  bild = null;
+  bereit = false;
+  root.classList.remove("film-bereit");
+  root.removeAttribute("data-film-stufe");
+  q.freigeben();
+  // die vorige Quelle blendet gerade aus? Dann ist sie wieder die gezeigte
+  if (geht) {
+    bild = geht.quelle;
+    geht = null;
+    bild.leinwand.classList.remove("wartet");
+    stufeMelden();
+    bereitMelden();
+  }
+  gescheitert(q.art);
+  starten();
+}
+
+function bereitMelden() {
+  if (!an || !bild) { return; }
+  bereit = true;
+  root.classList.add("film-bereit");
+  qual.summe = 0; qual.n = 0; qual.langsam = 0;
+  qual.ueberspringen = 90;
+  qual.ab = window.performance.now() + 1500;
+  starten();
+}
+
+// Das 3D-Bild ist selbst auf Stufe 0 zu langsam (oder „Bewegung reduzieren“ wurde eingeschaltet): die
+// vorberechnete Bildfolge übernimmt (das 3D-Bild läuft weiter, bis das erste Bild der Folge da ist). Zeigt der
+// Kreis schon die Folge (3D war erst in Vorbereitung), bleibt sie und lädt nun alle Bilder.
+function zurFolge(grund) {
+  ziel = "folge";
+  root.setAttribute("data-film-grund", grund);
+  if (bild && bild.art === "folge") {
+    if (kommt) { verwerfen(kommt); }
+    if (bild.vollLaden) { bild.vollLaden(); }
+    return;
+  }
+  if (!folgeKaputt) { vorbereiten("folge"); }
+}
+
+// „Bewegung reduzieren“ während des Besuchs geändert: eingeschaltet übernimmt die Bildfolge (wo sie scharf genug
+// ist), ausgeschaltet wird die Quelle neu gewählt, falls die Folge nur deswegen lief (sonst bleibt der Grund,
+// z. B. Touch-Gerät)
+function bewegungGeaendert() {
+  if (!an || !ziel) { return; }
+  if (gedaempft() && !pruef) {
+    if (ziel === "3d" && folgeScharf()) { zurFolge(GRUND_RUHIG); }
+  } else if (root.getAttribute("data-film-grund") === GRUND_RUHIG) {
+    ziel = "";
+    root.removeAttribute("data-film-grund");
+    weiterschalten();
+  }
 }
 
 function einschalten() {
   if (an) { return; }
   try {
-    if (!gebaut && !bauen()) { kaputt = true; ausschalten("fehler"); return; }
+    if (!gebaut && !bauen()) { fehlerAus(); return; }
   } catch (fehler) {
-    kaputt = true;
-    ausschalten("fehler");
+    fehlerAus();
     return;
   }
-  // vom Besucher gewünscht: auf der leichten Stufe (falls der Film vorher schwerer gebaut war)
-  if (erzwungen && welt.stufe > 0) { welt.setzeStufe(0); stufeMelden(); }
-  qual.summe = 0; qual.n = 0; qual.langsam = 0;
   root.classList.add("film-an");
   an = true;
   themaLesen();
   messen();
-  window.addEventListener("scroll", kopfPruefen, { passive: true });
   window.addEventListener("wheel", rad, { passive: false });
   kopfPruefen();
-  var start = function () {
-    if (!an) { return; }
-    bereit = true;
-    root.classList.add("film-bereit");
-    qual.ueberspringen = 90;
-    qual.ab = window.performance.now() + 1500;
-    starten();
-  };
-  if (bereit) { start(); return; }
-  // Vorlauf starten: während der Vorbereitung folgen Texte und Skala schon dem Scrollen
-  starten();
-  vorbereiten().then(start, function () { kaputt = true; ausschalten("fehler"); });
+  if (bild) { bereitMelden(); } else { starten(); }
+  weiterschalten();
 }
 
-// grund: "langsam" (Bildrate), "fehler" (Kontextverlust, Ausnahme) oder leer (Pause, Einstellung);
-// film.js erfährt davon über das Ereignis „film-aus“ und bietet bei Bedarf „Film trotzdem starten“ an
+// grund: "fehler" (der Film ist ausgefallen) oder leer (Pause, Einstellung); film.js erfährt davon über
+// das Ereignis „film-aus“ und bietet bei einem Fehler „Film trotzdem starten“ an
 function ausschalten(grund) {
   var war = an || root.classList.contains("film-an");
   var mittendrin = an && gebaut && lies() >= filmTop + H;
   an = false;
   gleit.aktiv = false;
   stoppen();
-  window.removeEventListener("scroll", kopfPruefen, { passive: true });
   window.removeEventListener("wheel", rad, { passive: false });
   root.classList.remove("film-ende", "film-an", "film-bereit");
   filmEnde = false;
+  if (grund === "fehler") { alleFreigeben(); }
   if (!war) { return; }
   if (mittendrin) {
     var danach = document.getElementById("weg");
@@ -606,14 +673,18 @@ function ausschalten(grund) {
   document.dispatchEvent(new CustomEvent("film-aus", { detail: { grund: grund || "" } }));
 }
 
-// „Film trotzdem starten“: der Besucher entscheidet sich bewusst für den Film (auch bei „Bewegung
-// reduzieren“ oder nach dem Abschalten wegen niedriger Bildrate). Er startet auf der leichten Stufe und
-// schaltet sich nicht mehr von selbst ab; das gilt nur für diesen Besuch, gespeichert wird nichts.
+// „Film trotzdem starten“: nach einem Ausfall ein neuer Versuch (alles von vorn), mit der Einstellung
+// BEI_REDUZIERTER_BEWEGUNG = "aus" auch bei „Bewegung reduzieren“ (dann gedämpft). Gilt nur für diesen
+// Besuch, gespeichert wird nichts.
 export function erzwingen() {
   erzwungen = true;
-  langsamAus = false;
+  if (kaputt) {
+    kaputt = false;
+    folgeKaputt = false;
+    ziel = "";
+    alleFreigeben();
+  }
   qual.langsam = 0;
-  if (gebaut && welt && welt.stufe > 0) { welt.setzeStufe(0); stufeMelden(); if (an) { messen(); } }
   steuern();
 }
 
@@ -629,7 +700,10 @@ function steuern() {
 }
 
 export function start(optionen) {
-  if (optionen && optionen.erzwungen) { erzwungen = true; }
+  optionen = optionen || {};
+  if (optionen.erzwungen) { erzwungen = true; }
+  reduziertAus = !!optionen.reduziertAus;
+  if (optionen.folgeAufTouch !== undefined) { folgeAufTouch = !!optionen.folgeAufTouch; }
   try {
     var vorhanden = document.getElementById("film");
     if (!vorhanden || !vorhanden.querySelector(".buehne")) { root.classList.remove("film-an"); return; }
@@ -639,11 +713,22 @@ export function start(optionen) {
       if (!an) { return; }
       window.clearTimeout(neuMessen);
       neuMessen = window.setTimeout(function () {
-        if (an && (buehne.clientWidth !== W || buehne.clientHeight !== H || anker.getBoundingClientRect().width !== lay.r * 2)) { messen(); if (bereit) { zeichneBild(); } }
+        if (an && (buehne.clientWidth !== W || buehne.clientHeight !== H || anker.getBoundingClientRect().width !== lay.r * 2)) { messen(); if (bild) { zeichneBild(); } }
       }, 120);
     });
+    // ohne Dauerschleife (Bildfolge, gedämpft) weckt das Scrollen die Schleife, solange der Film im Bild ist
+    // (sonst nichts zu zeichnen; kommt er wieder ins Bild, startet sie der Beobachter unten)
+    window.addEventListener("scroll", function () {
+      zuletztGescrollt = window.performance.now();
+      if (an && (sichtbar || gleit.aktiv)) { starten(); }
+    }, { passive: true });
     document.addEventListener("bewegung", steuern);
-    [mqReduce, mqForced, mqHoch].forEach(function (q) { if (q && q.addEventListener) { q.addEventListener("change", steuern); } });
+    // Änderungen der Einstellungen über eigene Abfragen, die sonst niemand liest: Chrome meldet eine Änderung
+    // nicht, wenn dieselbe Abfrage vorher schon gelesen wurde, und gedaempft() liest mqReduce in jedem Bild
+    // (so ging die Meldung verloren, solange das 3D-Bild lief)
+    [mq("(prefers-reduced-motion: reduce)"), mq("(forced-colors: active)")].forEach(function (q) {
+      if (q && q.addEventListener) { q.addEventListener("change", function () { steuern(); bewegungGeaendert(); if (an) { starten(); } }); }
+    });
     if (mqHell && mqHell.addEventListener) { mqHell.addEventListener("change", function () { if (an) { themaLesen(); } }); }
     document.addEventListener("click", function (e) {
       if (!an || !e.target.closest) { return; }
@@ -654,24 +739,61 @@ export function start(optionen) {
       }
     }, true);
     // Sprachschalter der Seite: Namen auf den Platten neu malen (Skala und Skript-Blatt lesen die Sprache je Bild)
-    document.addEventListener("sprache", function () { if (gebaut) { maschine.beschriftungMalen(); } });
+    document.addEventListener("sprache", function () { [bild, kommt && kommt.quelle].forEach(function (q) { if (q) { q.sprache(); } }); });
     // zurück aus dem Hintergrund: die Zeit im Hintergrund zählt nicht als langsames Bild
     document.addEventListener("visibilitychange", function () { if (an && !document.hidden) { letzte = window.performance.now(); starten(); } });
+    // Film im Bild? Solange ja, läuft beim Scrollen die Schleife und prüft dabei auch das Ende der Fahrt
+    // (kopfPruefen); ist er weg, einmal hier. Ein eigener Scroll-Listener dafür läse die Scrollstelle nach den
+    // Schreibzugriffen des Kanäle-Films und erzwänge so eine zusätzliche Stilberechnung je Bild.
     if ("IntersectionObserver" in window) {
       new IntersectionObserver(function (eintraege) {
         sichtbar = eintraege[0].isIntersecting;
         root.classList.toggle("film-sichtbar", sichtbar);
         if (sichtbar && an) { starten(); }
+        if (!sichtbar && an) { kopfPruefen(); }
       }, { rootMargin: "10% 0px 10% 0px" }).observe(vorhanden);
     }
-    window.addEventListener("load", function () { if (an) { messen(); } });
+    window.addEventListener("load", function () { if (an) { messen(); if (bild) { zeichneBild(); } } });
     if (document.fonts && document.fonts.load) {
       // die Plattennamen erst mit geladener Schrift malen (Canvas nimmt sonst die Ersatzschrift)
-      document.fonts.load('700 58px "Raleway"').then(function () { if (gebaut) { maschine.beschriftungMalen(); } }, function () {});
+      document.fonts.load('700 58px "Raleway"').then(function () { [bild, kommt && kommt.quelle].forEach(function (q) { if (q) { q.sprache(); } }); }, function () {});
     }
   } catch (fehler) {
     kaputt = true;
     ausschalten("fehler");
     root.classList.remove("film-an");
   }
+}
+
+// Für das Werkzeug, das die Bildfolge rendert (_werkzeuge/bildfolge_rendern.mjs): ein Bild des 3D-Kreises
+// zur Scrollposition s und Zeit t, kante Pixel im Quadrat (doppelt so groß gerendert und verkleinert),
+// Ecken außerhalb des Kreises schwarz, dazu die Lage der Schichtnamen im Überblick. Hält die Bildschleife
+// an; auf der Seite selbst ungenutzt.
+export function standbild(s, t, kante, stufe, format, qualitaet) {
+  if (!gebaut || !bereit || !bild || !bild.standbild) { return null; }
+  standbildModus = true;
+  stoppen();
+  sGl = s;
+  zeit = t;
+  zustand(s);
+  var quelleBild = bild.standbild(Z, t, lay, kante, stufe);
+  var c = document.createElement("canvas");
+  c.width = c.height = kante;
+  var ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(quelleBild, 0, 0, kante, kante);
+  ctx.beginPath();
+  ctx.rect(0, 0, kante, kante);
+  ctx.arc(kante / 2, kante / 2, kante / 2 + 1, 0, Math.PI * 2);
+  ctx.fillStyle = "#000";
+  ctx.fill("evenodd");
+  var et = [];
+  if (Z.auf > 0.02 && Z.etiketten) {
+    for (var i = 0; i < Z.etiketten.length; i++) {
+      var e = Z.etiketten[i];
+      if (e) { et.push([e.j, +((e.x - lay.x) / lay.r).toFixed(4), +((e.y - lay.y) / lay.r).toFixed(4)]); }
+    }
+  }
+  return { bild: c.toDataURL(format || "image/png", qualitaet || 0.8), etiketten: et, auf: +Z.auf.toFixed(4) };
 }

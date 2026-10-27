@@ -164,9 +164,13 @@
   function initPause() {
     var knopf = document.querySelector(".pause");
     if (!knopf) { return; }
-    // bei „Bewegung reduzieren“ bewegt sich nichts, die Taste entfällt; hat der Besucher den Film trotzdem
-    // gestartet („Film trotzdem starten“, film.js), braucht er sie zum Anhalten
-    function anzeigen() { knopf.hidden = !!(mqReduce && mqReduce.matches) && !root.classList.contains("film-erzwungen"); }
+    // Die Filme laufen bei „Bewegung reduzieren“ gedämpft weiter (film.js): Die Taste bleibt, sie schaltet sie
+    // ab. Nur mit der Einstellung „aus“ (data-reduziert) bewegt sich dann nichts und die Taste entfällt, bis
+    // der Besucher „Film trotzdem starten“ klickt.
+    function anzeigen() {
+      knopf.hidden = !!(mqReduce && mqReduce.matches) && root.getAttribute("data-reduziert") === "aus" &&
+        !root.classList.contains("film-erzwungen");
+    }
     anzeigen();
     document.addEventListener("film-erzwungen", anzeigen);
     knopf.addEventListener("click", function () {

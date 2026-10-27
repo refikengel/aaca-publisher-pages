@@ -9,12 +9,21 @@
 <title>IT-Engel</title>
 <meta name="description" content="IT-Engel: Kurzvideos des Betreibers, KI-gestützt erstellt und mit synthetischer Sprecherstimme. Kanäle, Kontakt und rechtliche Angaben. / IT-Engel: short videos by the operator, created with AI assistance and a synthetic voice. Channels, contact and legal information.">
 <link rel="preload" href="assets/fonts/Raleway-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=10">
+<!-- Film: die Module und das erste Bild gleich mitladen (sonst holt der Browser sie nacheinander) -->
+<link rel="modulepreload" href="film3d/haupt.js?v=10">
+<link rel="modulepreload" href="film3d/skala.js?v=9">
+<link rel="modulepreload" href="film3d/helfer.js">
+<link rel="modulepreload" href="film3d/farben.js">
+<link rel="modulepreload" href="film3d/fahrplan.js?v=10">
+<link rel="modulepreload" href="film3d/folge.js?v=10">
+<link rel="modulepreload" href="film3d/folge-daten.js?v=9">
+<link rel="preload" href="assets/film/f000.webp" as="image" type="image/webp">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<script src="site.js?v=8"></script>
-<script src="film.js?v=8"></script>
-<script src="kanaele.js?v=8"></script>
-<script src="motion.js"></script>
+<script src="site.js?v=10"></script>
+<script src="film.js?v=10"></script>
+<script src="kanaele.js?v=10"></script>
+<script src="motion.js?v=10"></script>
 </head>
 <body>
 <a class="skip-link" href="#inhalt"><span lang="de">Zum Inhalt springen</span><span class="trenner"> / </span><span lang="en">Skip to content</span></a>
@@ -92,7 +101,7 @@
             </p>
             <p class="film-trotzdem" id="film-trotzdem" hidden>
               <button type="button" class="knopf-leise" id="film-trotzdem-knopf" aria-describedby="film-trotzdem-grund"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-play"/></svg><span lang="de">Film trotzdem starten</span><span lang="en">Play the film anyway</span></button>
-              <span class="film-trotzdem-grund" id="film-trotzdem-grund"><span class="grund-langsam"><span lang="de">Auf diesem Gerät lief der Film zu langsam.</span><span lang="en">The film ran too slowly on this device.</span></span><span class="grund-ruhig"><span lang="de">Auf diesem Gerät ist „Bewegung reduzieren“ eingestellt.</span><span lang="en">This device is set to reduce motion.</span></span></span>
+              <span class="film-trotzdem-grund" id="film-trotzdem-grund"><span class="grund-fehler"><span lang="de">Der Film ließ sich auf diesem Gerät nicht starten.</span><span lang="en">The film could not start on this device.</span></span><span class="grund-ruhig"><span lang="de">Auf diesem Gerät ist „Bewegung reduzieren“ eingestellt.</span><span lang="en">This device is set to reduce motion.</span></span></span>
             </p>
           </div>
           <div class="rund rund-hero" aria-hidden="true">
@@ -323,7 +332,7 @@
                     <span class="tt-knopf"><svg><use href="#i-teilen"/></svg></span>
                     <span class="tt-platte avatar"><img src="assets/img/feder-hell.png" alt="" width="360" height="248"></span>
                   </div>
-                  <div class="tt-herzen"><i></i><i></i><i></i><i></i><i></i></div>
+                  <div class="tt-herzen"><i class="tt-herzchen"></i><i class="tt-herzchen"></i><i class="tt-herzchen"></i><i class="tt-herzchen"></i><i class="tt-herzchen"></i></div>
                   <div class="tt-text"><b>@itengel</b><span>we make it himmlisch</span></div>
                   <div class="tt-nav"><svg><use href="#i-haus"/></svg><svg><use href="#i-person"/></svg><span class="tt-neu"></span><svg><use href="#i-nachricht"/></svg><svg><use href="#i-person"/></svg></div>
                 </div>

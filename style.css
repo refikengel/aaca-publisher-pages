@@ -130,7 +130,13 @@ main { flex: 1 0 auto; }
 
 [hidden] { display: none !important; }
 
-::selection { background: var(--gold-fill); color: var(--on-gold); }
+/* Textauswahl in Gold (wie --gold-fill und --on-gold), mit festen Farben statt var(): mit Variablen rechnet der
+   Browser bei jeder Änderung einer Variablen an einem Element (die Filme setzen sie je Bild) auch alle Kinder
+   neu, und jedes Element zweimal (gemessen: etwa doppelte Stilarbeit beim Wischen). */
+::selection { background: #e3b45d; color: #17110a; }
+@media (prefers-color-scheme: light) {
+  ::selection { background: #d9a441; }
+}
 
 .wrap {
   width: 100%;
@@ -342,6 +348,18 @@ html:not(.js) .site-header {
 @media (max-width: 19.5em) {
   .site-header .wrap { flex-wrap: wrap; justify-content: center; }
 }
+/* niedrige Fenster im Querformat (flache Laptopfenster, Handy quer): kleinere Kopfzeile; --kopf-h ist ihre
+   Höhe (Logo und Innenabstand), danach richten sich Film und Kanäle */
+@media (min-aspect-ratio: 11/10) and (max-height: 36rem) {
+  :root { --kopf-h: 5rem; }
+  .logo { height: 3.8rem; }
+  .site-header .wrap { padding-block: .6rem; }
+}
+@media (min-aspect-ratio: 11/10) and (max-height: 28rem) {
+  :root { --kopf-h: 3.7rem; }
+  .logo { height: 2.9rem; }
+  .site-header .wrap { padding-block: .4rem; }
+}
 
 /* ------------------------------------------------------------------ Fußzeile */
 
@@ -509,8 +527,9 @@ html:not(.js) .site-header {
 html:not([data-sprache]) .hero-lead[lang="en"] { color: var(--ink-muted); font-size: 1.02rem; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: .8rem; margin: 2rem 0 0; }
 
-/* „Film trotzdem starten“ (film.js): unauffällig unter den Knöpfen des Hero, nur wenn der Film aus ist,
-   das Gerät ihn aber zeigen könnte; daneben kurz der Grund (in der gewählten Sprache) */
+/* „Film trotzdem starten“ (film.js): der Notausgang, unauffällig unter den Knöpfen des Hero, nur wenn der
+   Film ausgefallen ist (oder mit der Einstellung „aus“ bei „Bewegung reduzieren“); daneben kurz der Grund
+   (in der gewählten Sprache) */
 .film-trotzdem { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem 1rem; margin: 1.3rem 0 0; color: var(--ink-muted); font-size: .88rem; }
 .knopf-leise {
   display: inline-flex;
@@ -531,15 +550,16 @@ html:not([data-sprache]) .hero-lead[lang="en"] { color: var(--ink-muted); font-s
 .knopf-leise:hover { border-color: var(--gold); color: var(--gold); }
 .knopf-leise .icon { width: .9rem; height: .9rem; }
 .film-trotzdem-grund > span { display: none; }
-.film-trotzdem[data-grund="langsam"] .grund-langsam,
+.film-trotzdem[data-grund="fehler"] .grund-fehler,
 .film-trotzdem[data-grund="ruhig"] .grund-ruhig { display: inline; }
 
 /* ------------------------------------------------- Film: Kamerafahrt (film.js) */
 
-/* Zusatz. Ohne Skript, bei „Bewegung reduzieren“ und nach Pause ist .film nur ein
-   Rahmen um das Hero. film.js setzt html.film-an: Dann ist .film eine lange
+/* Zusatz. Ohne Skript, bei erzwungenen Farben und nach der Pause ist .film nur ein
+   Rahmen um das Hero. film.js setzt html.film-an (auf jedem Gerät, in jeder
+   Fenstergröße, bei „Bewegung reduzieren“ gedämpft): Dann ist .film eine lange
    Scroll-Strecke, .buehne bleibt stehen, und film.js blendet Kapitel ein und aus
-   (Texte, Ring mit Video). Die Texte der Fahrt wiederholen nur, was weiter unten
+   (Texte, Kreis mit Bild). Die Texte der Fahrt wiederholen nur, was weiter unten
    steht, und sind für Hilfstechnik ausgeblendet. */
 
 .himmel,
@@ -549,6 +569,41 @@ html:not([data-sprache]) .hero-lead[lang="en"] { color: var(--ink-muted); font-s
 .film-kapitel,
 .film-start,
 .film-skip { display: none; }
+
+/* Werte, die die Filme beim Scrollen setzen und nur das Element selbst braucht: nicht vererbt, so muss der
+   Browser bei einer Änderung nicht alles darunter neu berechnen (ohne @property erben sie wie gewohnt) */
+@property --h { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --sicht { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --morgen { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --hoehe { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --kopf { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --wr { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --wx { syntax: "<length-percentage>"; inherits: false; initial-value: 88%; }
+@property --wy { syntax: "<length-percentage>"; inherits: false; initial-value: 14%; }
+/* Kanäle: der Ablauf --t einer Szene (0 bis 1) und alles, was daraus berechnet wird. kanaele.js setzt --t nur
+   an die Elemente, die ihn brauchen (Liste MIT_ABLAUF dort); jedes berechnet seine Werte selbst. Als Zahlen
+   ohne Vererbung, sonst stünde in jedem abgeleiteten Wert der Text von --t, er änderte sich in jedem Bild und
+   der Browser rechnete die ganze Szene samt Symbolen neu (gemessen: bis zur Hälfte der Zeit je Bild).
+   --ablauf: von bis, der Bereich von --t, in dem sich an diesem Element etwas ändert (ohne Angabe 0 1).
+   kanaele.js liest ihn einmal und setzt --t nur darin; außerhalb bleibt der Wert stehen, und der Browser muss
+   das Element nicht neu berechnen. Wer eine Formel mit var(--t) ändert, passt --ablauf an. */
+@property --t { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --e { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --auf { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --z { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --s { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --wisch { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --mag { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --quer { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --lauf { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --zurueck { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --ringlauf { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --kacheln { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --kachel { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --doppel { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --feed { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --gefaellt { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --merken { syntax: "<number>"; inherits: false; initial-value: 0; }
 
 html.film-an .film {
   position: relative;
@@ -571,8 +626,9 @@ html.film-an .buehne {
 html.film-an .site-header { position: fixed; top: 0; left: 0; right: 0; }
 /* solange die Fahrt unter der Kopfzeile läuft, bleibt sie durchsichtig; danach wird sie wie auf den anderen Seiten fest */
 html.film-an:not(.film-ende) .site-header.is-scrolled { background: transparent; border-bottom-color: transparent; }
-/* solange die Fahrt läuft, ist „Nach oben“ überflüssig */
-html.film-an.film-sichtbar .nach-oben { display: none; }
+/* solange die Fahrt oder der Kanäle-Film läuft, ist „Nach oben“ überflüssig (es läge auf den Texten) */
+html.film-an.film-sichtbar .nach-oben,
+html.kanalfilm.kanal-sichtbar .nach-oben { display: none; }
 
 /* Himmel: Sterne und ein Glühen am Horizont, das beim Aufstieg wächst (--morgen 0 bis 1) */
 html.film-an .himmel {
@@ -600,6 +656,8 @@ html.film-an .himmel {
     radial-gradient(1px 1px at 5% 52%, #f3ecdc, transparent 70%);
   background-size: 41rem 29rem;
   translate: 0 calc(var(--hoehe, 0) * -3%);
+  /* eigene Ebene: Verschieben und Ausblenden ohne neues Malen der vielen Verläufe */
+  will-change: translate, opacity;
 }
 .himmel-sterne::after {
   content: "";
@@ -619,6 +677,7 @@ html.film-an .himmel {
   position: absolute;
   inset: 0;
   opacity: calc(.12 + var(--morgen, 0) * .88);
+  will-change: opacity;
   background:
     radial-gradient(70% 46% at 62% 112%, rgba(231, 150, 64, .55), transparent 70%),
     radial-gradient(90% 60% at 62% 130%, rgba(255, 214, 140, .35), transparent 72%);
@@ -650,8 +709,9 @@ html.film-an .hero-text {
   opacity: calc(1 - var(--h, 0) * 1.25);
   translate: calc(var(--h, 0) * -2.5rem) calc(var(--h, 0) * -1rem);
 }
-/* Der Kreis: .film-anker legt fest, wo er steht und wie groß er ist, und zeigt bis zum ersten
-   3D-Bild ein Standbild; darüber das runde 3D-Bild (.film-3d), darüber die Skala (.film-leinwand) */
+/* Der Kreis: .film-anker legt fest, wo er steht und wie groß er ist, und zeigt bis zum ersten Bild
+   ein Standbild; darüber das runde Bild (.film-3d, je Quelle ein Canvas: Bildfolge oder Echtzeit-3D; eine
+   neue Quelle wartet unsichtbar und blendet dann über die bisherige), darüber die Skala (.film-leinwand) */
 html.film-an .hero .rund { display: none; }
 html.film-an .film-anker,
 html.film-an .film-3d {
@@ -677,9 +737,10 @@ html.film-an .film-3d {
   transition: opacity .9s var(--ease);
 }
 html.film-bereit .film-3d { opacity: 1; }
+html.film-an .film-3d.wartet { opacity: 0; }
 html.film-bereit .film-anker { opacity: 0; }
-/* Vorlauf (das 3D-Bild wird noch vorbereitet, haupt.js): Texte und Skala laufen schon mit, das Standbild des
-   Hero tritt außerhalb des Hero zurück */
+/* Vorlauf (das erste Bild lädt noch, haupt.js): Texte und Skala laufen schon mit, das Standbild des Hero tritt
+   außerhalb des Hero zurück */
 html.film-an:not(.film-bereit) .film-anker { opacity: calc(1 - var(--sicht, 0) * .65); }
 html.film-an .film-leinwand {
   display: block;
@@ -698,12 +759,17 @@ html.film-an .film-kapitel {
   z-index: 3;
   pointer-events: none;
 }
+/* --in und --out (Ein- und Ausblenden des Kapitels, 0 bis 1) setzt film3d/haupt.js an die Zeilen des Texts und
+   an die Wörter des Titels, nicht an das Kapitel: als Zahlen ohne Vererbung, so rechnet der Browser je Bild nur
+   diese Elemente neu, nicht das ganze Kapitel samt geteilter Buchstaben */
+@property --in { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --out { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --k { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --g { syntax: "<number>"; inherits: false; initial-value: 0; }
 .kap {
   position: absolute;
   inset: 0;
   visibility: hidden;
-  --in: 0;
-  --out: 0;
 }
 .kap.an { visibility: visible; }
 
@@ -860,6 +926,8 @@ html.film-an .film-start {
   background: var(--gold);
   animation: start-lauf 2.4s var(--ease) infinite;
 }
+/* nach dem Hero unsichtbar (film3d/haupt.js setzt ruht): der Punkt läuft dann nicht weiter */
+.film-start.ruht i::after { animation-play-state: paused; }
 @keyframes start-lauf {
   from { translate: 0 -100%; }
   to { translate: 0 270%; }
@@ -895,6 +963,8 @@ html.film-an .film-start {
   html.film-an .hero h1 { font-size: clamp(2.6rem, 13vw, 3.8rem); }
   html.film-an .buehne { --ring: min(70vw, 34svh); }
   .kap-text p[lang] { font-size: .95rem; }
+  /* das Startzeichen läge hier auf den Knöpfen des Hero (Handys mit sichtbarer Adressleiste) */
+  html.film-an .film-start { display: none; }
 }
 
 /* niedrige Fenster im Querformat (Laptops mit Adressleiste) */
@@ -904,6 +974,30 @@ html.film-an .film-start {
   .kap-text p[lang] { margin-top: .8rem; font-size: 1rem; }
   .kap-marke { margin-top: 1rem !important; }
   html.film-an .hero h1 { font-size: clamp(3rem, 8.4vw, 6rem); }
+}
+/* noch niedriger (flache Fenster, Handy quer): Kreis und Texte mittig im Raum unter der Kopfzeile, alles
+   etwas kleiner, das Startzeichen entfällt */
+@media (min-aspect-ratio: 11/10) and (max-height: 36rem) {
+  html.film-an .buehne { --ring: min(calc(100svh - var(--kopf-h) - 3.4rem), 40vw); }
+  html.film-an .film-anker,
+  html.film-an .film-3d { top: calc(var(--kopf-h) + (100% - var(--kopf-h)) / 2); }
+  html.film-an .hero { padding: calc(var(--kopf-h) + .4rem) 0 calc(var(--faden-b) + 1.2rem); }
+  html.film-an .hero h1 { margin: .15rem 0 .5rem; font-size: clamp(2.2rem, min(7.4vw, 14svh), 5rem); }
+  html.film-an .hero-lead { margin-bottom: .3rem; font-size: 1rem; line-height: 1.45; }
+  html.film-an .hero-cta { margin-top: 1rem; }
+  html.film-an .hero-cta .knopf-link { padding: .7rem 1.15rem; }
+  html.film-an .film-start { display: none; }
+  .kap-text { top: calc(var(--kopf-h) + (100% - var(--kopf-h)) / 2); padding-bottom: 0; }
+  .kap-nr { font-size: clamp(2rem, 9svh, 3rem); }
+  .kap-titel { font-size: clamp(1.7rem, 8svh, 2.8rem); }
+  .kap-text p[lang] { margin-top: .6rem; font-size: .95rem; line-height: 1.45; }
+  .kap-marke { margin-top: .7rem !important; }
+  html.film-an .film-skip { bottom: calc(var(--faden-b) * .6); }
+}
+@media (min-aspect-ratio: 11/10) and (max-height: 28rem) {
+  html.film-an .hero .eyebrow { font-size: .7rem; }
+  html.film-an .hero-lead { font-size: .92rem; }
+  .kap-marke { display: none; }
 }
 
 /* ------------------------------------------------------- Abschnitte der Seite */
@@ -1087,7 +1181,8 @@ html:not([data-sprache]) .station-text p[lang="en"] { color: var(--ink-muted); f
 /* kanaele.js setzt html.kanalfilm: Dann ist #kanalfilm eine Scroll-Strecke mit fester Bühne. Jede
    Plattform bekommt eine eigene Szene in ihrem Stil (Farben, Bedienoberfläche, typische Bewegung) und
    öffnet sich als Kreis aus ihrem Symbol oben rechts. kanaele.js liefert je Szene --t (0 bis 1, Ablauf
-   in der Szene) und --wr (Radius der Kreisblende); alles andere rechnet das Stylesheet. Nach der letzten
+   in der Szene, nur an die Elemente, die ihm folgen; siehe @property oben) und --wr (Radius der
+   Kreisblende); alles andere rechnet das Stylesheet, jedes Element für sich. Nach der letzten
    Szene löst sich die Bühne und scrollt mit der Seite weg. Die Szenen sind
    Dekoration (aria-hidden), die Links bleiben echte Links. Plattformen nur nachgebildet, keine Logos. */
 
@@ -1146,8 +1241,29 @@ html.kanalfilm .kanal-eintrag.voll { clip-path: none; }
 html.kanalfilm .kanal-eintrag.bedeckt { background: none; }
 html.kanalfilm .kanal-eintrag.zu .kanal-szene,
 html.kanalfilm .kanal-eintrag.bedeckt .kanal-szene { visibility: hidden; }
-html.kanalfilm .kanal-eintrag.zu *,
-html.kanalfilm .kanal-eintrag.bedeckt * { animation-play-state: paused !important; }
+/* Die Dauerbewegungen der Szenen (Goldstaub, Platte, Herzen, Schweben) ruhen, solange ihre Szene zu oder verdeckt
+   ist, die Bühne außer Sicht steht oder gerade gescrollt wird (kanaele.js: Klassen zu, bedeckt, ruht, wischt).
+   Gezielt diese Elemente: mit * rechnete der Browser bei jedem Wechsel der Klasse die ganze Szene neu. */
+html.kanalfilm .kanal-eintrag.zu .staub,
+html.kanalfilm .kanal-eintrag.zu .tt-platte,
+html.kanalfilm .kanal-eintrag.zu .tt-herzchen,
+html.kanalfilm .kanal-eintrag.zu .ig-schweben,
+html.kanalfilm .kanal-eintrag.zu .fb-schweben,
+html.kanalfilm .kanal-eintrag.bedeckt .staub,
+html.kanalfilm .kanal-eintrag.bedeckt .tt-platte,
+html.kanalfilm .kanal-eintrag.bedeckt .tt-herzchen,
+html.kanalfilm .kanal-eintrag.bedeckt .ig-schweben,
+html.kanalfilm .kanal-eintrag.bedeckt .fb-schweben,
+html.kanalfilm .kanal-buehne.ruht .staub,
+html.kanalfilm .kanal-buehne.ruht .tt-platte,
+html.kanalfilm .kanal-buehne.ruht .tt-herzchen,
+html.kanalfilm .kanal-buehne.ruht .ig-schweben,
+html.kanalfilm .kanal-buehne.ruht .fb-schweben,
+html.kanalfilm .kanal-buehne.wischt .staub,
+html.kanalfilm .kanal-buehne.wischt .tt-platte,
+html.kanalfilm .kanal-buehne.wischt .tt-herzchen,
+html.kanalfilm .kanal-buehne.wischt .ig-schweben,
+html.kanalfilm .kanal-buehne.wischt .fb-schweben { animation-play-state: paused; }
 
 /* Text der Szene: der Link selbst (Name, Adresse, eine Zeile, Knopf) */
 html.kanalfilm .kanal,
@@ -1170,7 +1286,8 @@ html.kanalfilm .kanal .pfeil { display: none; }
 html.kanalfilm .kanal-text { display: block; }
 html.kanalfilm .kanal-text > *,
 html.kanalfilm .kanal-los {
-  --e: clamp(0, (var(--t, 0) - .14 - var(--v, 0)) * 6, 1);
+  --e: clamp(0, (var(--t) - .14 - var(--v, 0)) * 6, 1);
+  --ablauf: .14 .4;
   opacity: var(--e);
   translate: 0 calc((1 - var(--e)) * 1.6rem);
   will-change: opacity, translate;
@@ -1216,7 +1333,7 @@ html.kanalfilm .kanal-szene {
   z-index: 1;
   pointer-events: none;
   perspective: 1700px;
-  perspective-origin: 68% 50%;
+  perspective-origin: 68% var(--geraet-y, 50%);
 }
 .szene-grund { position: absolute; inset: 0; overflow: hidden; background: var(--k-grund); }
 .kanal-szene svg {
@@ -1230,10 +1347,11 @@ html.kanalfilm .kanal-szene {
   stroke-linejoin: round;
 }
 .geraet {
-  --auf: clamp(0, (var(--t, 0) - .04) * 4, 1);
+  --auf: clamp(0, (var(--t) - .04) * 4, 1);
   position: absolute;
   left: 68%;
-  top: 53%;
+  /* Höhe aus kanaele.js (frei unter den Symbolen), sonst wie bisher */
+  top: var(--geraet-y, 53%);
   width: calc(var(--gh) * 9 / 19.5);
   height: var(--gh);
   border-radius: calc(var(--gh) * .075);
@@ -1245,9 +1363,9 @@ html.kanalfilm .kanal-szene {
     0 calc(var(--gh) * .015) calc(var(--gh) * .03) rgba(0, 0, 0, .3);
   transform:
     translate(-50%, -50%)
-    translateY(calc((1 - var(--auf)) * 14vh))
+    translateY(calc((1 - var(--auf)) * var(--auf-weg, 14vh)))
     rotateX(5deg)
-    rotateY(calc(-17deg + var(--t, 0) * 22deg))
+    rotateY(calc(-17deg + var(--t) * 22deg))
     rotateZ(calc(var(--z, 0) * 1deg))
     scale(var(--s, 1));
 }
@@ -1369,13 +1487,11 @@ html.kanalfilm .kanal-szene {
     radial-gradient(48% 44% at 62% 90%, rgba(254, 44, 85, .22), transparent 70%),
     radial-gradient(30% 30% at 14% 84%, rgba(37, 244, 238, .07), transparent 70%),
     #010101;
-  --wisch: clamp(0, (var(--t, 0) - .56) * 7, 1);
-  --mag: clamp(0, (var(--t, 0) - .3) * 9, 1);
 }
 html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba(37, 244, 238, .9), .035em .02em 0 rgba(254, 44, 85, .9); }
 .tt { background: #000; color: #fff; }
 .tt-feed { position: absolute; inset: 0; }
-.tt-video { position: absolute; left: 0; right: 0; top: 0; height: 100%; translate: 0 calc(var(--wisch) * -100%); will-change: translate; }
+.tt-video { --wisch: clamp(0, (var(--t) - .56) * 7, 1); --ablauf: .56 .71; position: absolute; left: 0; right: 0; top: 0; height: 100%; translate: 0 calc(var(--wisch) * -100%); will-change: translate; }
 .tt-video + .tt-video { top: 100%; }
 .tt-kopf {
   position: absolute;
@@ -1401,10 +1517,10 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .tt-plus::after { content: ""; position: absolute; left: 50%; top: 50%; width: .7em; height: .15em; border-radius: 1em; background: #fff; translate: -50% -50%; }
 .tt-plus::after { rotate: 90deg; }
 .tt-knopf svg { width: 2.5em; height: 2.5em; fill: #fff; stroke: none; }
-.tt-like svg { fill: color-mix(in srgb, #fe2c55 calc(var(--mag) * 100%), #fff); scale: calc(1 + var(--mag) * (1 - var(--mag)) * 1.4); }
+.tt-like svg { --mag: clamp(0, (var(--t) - .3) * 9, 1); --ablauf: .3 .42; fill: color-mix(in srgb, #fe2c55 calc(var(--mag) * 100%), #fff); scale: calc(1 + var(--mag) * (1 - var(--mag)) * 1.4); }
 .tt-platte { width: 3em; height: 3em; border: .55em solid #1f1f1f; box-shadow: 0 0 0 .1em #3a3a3a; animation: tt-drehen 5s linear infinite; }
 @keyframes tt-drehen { to { rotate: 360deg; } }
-.tt-herzen { position: absolute; z-index: 4; right: 1.1em; bottom: 15em; width: 3.2em; height: 15em; opacity: var(--mag); }
+.tt-herzen { --mag: clamp(0, (var(--t) - .3) * 9, 1); --ablauf: .3 .42; position: absolute; z-index: 4; right: 1.1em; bottom: 15em; width: 3.2em; height: 15em; opacity: var(--mag); }
 .tt-herzen i {
   position: absolute;
   bottom: 0;
@@ -1419,15 +1535,21 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .tt-herzen i::after { content: ""; position: absolute; width: .9em; height: .9em; border-radius: 50%; background: inherit; }
 .tt-herzen i::before { top: -.45em; left: 0; }
 .tt-herzen i::after { top: 0; left: .45em; }
-.tt-herzen i:nth-child(2) { left: .2em; background: #25f4ee; animation-delay: .5s; --dx: -1.2em; }
-.tt-herzen i:nth-child(3) { left: 1.6em; background: #fff; animation-delay: 1s; --dx: .9em; }
-.tt-herzen i:nth-child(4) { left: .7em; animation-delay: 1.5s; --dx: -.6em; }
-.tt-herzen i:nth-child(5) { left: 1.3em; background: #25f4ee; animation-delay: 2s; --dx: 1.3em; }
+/* je Herz eigene Keyframes mit festen Werten (ohne var(): so kann der Browser die Animation außerhalb des
+   Hauptfadens abspielen) */
+.tt-herzen i:nth-child(2) { left: .2em; background: #25f4ee; animation-name: tt-herz-2; animation-delay: .5s; }
+.tt-herzen i:nth-child(3) { left: 1.6em; background: #fff; animation-name: tt-herz-3; animation-delay: 1s; }
+.tt-herzen i:nth-child(4) { left: .7em; animation-name: tt-herz-4; animation-delay: 1.5s; }
+.tt-herzen i:nth-child(5) { left: 1.3em; background: #25f4ee; animation-name: tt-herz-5; animation-delay: 2s; }
 @keyframes tt-herz {
   0% { translate: 0 0; opacity: 0; scale: .5; }
   15% { opacity: 1; }
-  100% { translate: var(--dx, 0) -13em; opacity: 0; scale: 1.15; }
+  100% { translate: 0 -13em; opacity: 0; scale: 1.15; }
 }
+@keyframes tt-herz-2 { 0% { translate: 0 0; opacity: 0; scale: .5; } 15% { opacity: 1; } 100% { translate: -1.2em -13em; opacity: 0; scale: 1.15; } }
+@keyframes tt-herz-3 { 0% { translate: 0 0; opacity: 0; scale: .5; } 15% { opacity: 1; } 100% { translate: .9em -13em; opacity: 0; scale: 1.15; } }
+@keyframes tt-herz-4 { 0% { translate: 0 0; opacity: 0; scale: .5; } 15% { opacity: 1; } 100% { translate: -.6em -13em; opacity: 0; scale: 1.15; } }
+@keyframes tt-herz-5 { 0% { translate: 0 0; opacity: 0; scale: .5; } 15% { opacity: 1; } 100% { translate: 1.3em -13em; opacity: 0; scale: 1.15; } }
 .tt-text { position: absolute; z-index: 3; left: 1em; right: 5.5em; bottom: 6.5em; display: grid; gap: .35em; font-size: 1.05em; text-shadow: 0 1px 2px rgba(0, 0, 0, .55); }
 .tt-text b { font-weight: 700; }
 .tt-nav {
@@ -1462,9 +1584,13 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
     radial-gradient(40% 55% at 70% 52%, rgba(255, 0, 51, .25), transparent 72%),
     radial-gradient(60% 60% at 18% 18%, rgba(255, 255, 255, .045), transparent 70%),
     #0f0f0f;
-  --quer: clamp(0, (var(--t, 0) - .3) * 5, 1);
-  --lauf: clamp(0, (var(--t, 0) - .1) * 1.15, 1);
 }
+/* --quer: das Gerät dreht sich ins Querformat; --lauf: Fortschritt des Videos */
+.yt-geraet,
+.yt-hoch,
+.yt-quer { --quer: clamp(0, (var(--t) - .3) * 5, 1); }
+.yt-hoch,
+.yt-quer { --ablauf: .3 .5; }
 .yt-geraet {
   --z: calc(var(--quer) * -90);
   --s: calc(1 - var(--quer) * var(--quer-skala));
@@ -1474,6 +1600,8 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .yt-hoch { position: absolute; inset: 0; padding-top: 3.2em; opacity: calc(1 - clamp(0, var(--quer) * 2.6, 1)); }
 .yt-film { position: relative; width: 100%; aspect-ratio: 16 / 9; }
 .yt-balken { display: block; position: relative; height: .3em; background: rgba(255, 255, 255, .22); }
+.yt-balken > i,
+.yt-balken > b { --lauf: clamp(0, (var(--t) - .1) * 1.15, 1); --ablauf: .1 .97; }
 .yt-balken > i { position: absolute; inset: 0; background: #ff0033; transform: scaleX(var(--lauf)); transform-origin: 0 50%; will-change: transform; }
 .yt-balken > b { position: absolute; top: 50%; left: calc(var(--lauf) * 100%); width: .95em; height: .95em; border-radius: 50%; background: #ff0033; translate: -50% -50%; }
 .yt-info { padding: .9em 1em; }
@@ -1519,12 +1647,10 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
   --k-akzent-text: #c13584;
   --k-gewicht: 300;
   --k-grund: radial-gradient(130% 110% at 10% 110%, #feda75 0%, #fa7e1e 22%, #d62976 46%, #962fbf 70%, #4f5bd5 100%);
-  --zurueck: clamp(0, 1 - (var(--t, 0) - .02) * 4.5, 1);
-  --ring: clamp(0, (var(--t, 0) - .2) * 4, 1);
-  --kacheln: clamp(0, (var(--t, 0) - .3) * 2.4, 1);
-  --doppel: clamp(0, (var(--t, 0) - .72) * 7, 1);
 }
+/* --zurueck: das Gerät dreht sich zurück ins Hochformat */
 .ig-geraet {
+  --zurueck: clamp(0, 1 - (var(--t) - .02) * 4.5, 1);
   --z: calc(var(--zurueck) * -90);
   --s: calc(1 - var(--zurueck) * var(--quer-skala));
 }
@@ -1534,6 +1660,8 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .ig-kopf svg { width: 1.45em; height: 1.45em; }
 .ig-profil { display: flex; align-items: center; gap: 1em; padding: .6em 1.1em; }
 .ig-ring {
+  --ringlauf: clamp(0, (var(--t) - .2) * 4, 1);
+  --ablauf: .2 .45;
   display: grid;
   flex: none;
   place-items: center;
@@ -1541,8 +1669,8 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
   height: 6.4em;
   padding: .22em;
   border-radius: 50%;
-  background: conic-gradient(from calc(var(--ring) * 300deg), #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75);
-  scale: calc(.7 + var(--ring) * .3);
+  background: conic-gradient(from calc(var(--ringlauf) * 300deg), #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75);
+  scale: calc(.7 + var(--ringlauf) * .3);
 }
 .ig-ring .avatar { width: 100%; height: 100%; border: .26em solid #fff; }
 .ig-name { display: grid; gap: .25em; }
@@ -1558,10 +1686,12 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .ig-tabs svg:first-child { color: #000; }
 .ig-raster { display: grid; grid-template-columns: repeat(3, 1fr); gap: .15em; }
 .ig-raster i {
-  --k: clamp(0, var(--kacheln) * 9 - var(--n, 0) * .9, 1);
+  --kacheln: clamp(0, (var(--t) - .3) * 2.4, 1);
+  --kachel: clamp(0, var(--kacheln) * 9 - var(--n, 0) * .9, 1);
+  --ablauf: .3 .72;
   aspect-ratio: 3 / 4;
-  opacity: var(--k);
-  scale: calc(.82 + var(--k) * .18);
+  opacity: var(--kachel);
+  scale: calc(.82 + var(--kachel) * .18);
   will-change: opacity, scale;
 }
 .ig-raster i:nth-child(2) { --n: 1; }
@@ -1573,6 +1703,8 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .ig-raster i:nth-child(8) { --n: 7; }
 .ig-raster i:nth-child(9) { --n: 8; }
 .ig-herz {
+  --doppel: clamp(0, (var(--t) - .72) * 7, 1);
+  --ablauf: .72 .87;
   position: absolute;
   z-index: 5;
   left: 50%;
@@ -1604,9 +1736,11 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
   --k-akzent-text: #1877f2;
   --k-gewicht: 700;
   --k-grund: radial-gradient(60% 70% at 68% 45%, #3b95ff 0%, #1877f2 52%, #0b56c8 100%);
-  --feed: clamp(0, (var(--t, 0) - .08) * 2.2, 1);
-  --gefaellt: clamp(0, (var(--t, 0) - .62) * 8, 1);
 }
+/* --feed: der Verlauf rollt herein; --gefaellt: „Gefällt mir“ wird gedrückt */
+.fb-feed { --feed: clamp(0, (var(--t) - .08) * 2.2, 1); --ablauf: .08 .54; }
+.fb-like,
+.fb-blase { --gefaellt: clamp(0, (var(--t) - .62) * 8, 1); --ablauf: .62 .75; }
 .fb { background: #f0f2f5; color: #050505; }
 .fb-kopf { position: absolute; z-index: 3; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: .6em; padding: 3.2em 1em .7em; background: #fff; box-shadow: 0 1px 0 #e4e6eb; }
 .fb-logo { display: grid; place-items: center; width: 2.6em; height: 2.6em; margin-right: auto; border-radius: 50%; background: #1877f2; color: #fff; }
@@ -1661,18 +1795,17 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
   --k-akzent-text: #fff;
   --k-gewicht: 650;
   --k-grund: #fff;
-  --merken: clamp(0, (var(--t, 0) - .58) * 10, 1);
 }
 .k-pinterest mark.platzhalter { color: #111; }
-.pin-wand { position: absolute; inset: -10% 2% 0; display: grid; grid-template-columns: repeat(8, 1fr); align-items: start; gap: 1.2rem; opacity: .55; translate: 0 calc(var(--t, 0) * -8%); will-change: translate; }
+.pin-wand { position: absolute; inset: -10% 2% 0; display: grid; grid-template-columns: repeat(8, 1fr); align-items: start; gap: 1.2rem; opacity: .55; translate: 0 calc(var(--t) * -8%); will-change: translate; }
 .pin-wand i { display: block; height: 18rem; border-radius: 1.4rem; background: #f1f1f1; }
 .pin-wand i:nth-child(2n) { height: 26rem; margin-top: 6rem; }
 .pin-wand i:nth-child(3n) { height: 14rem; margin-top: 2rem; }
 .pin-frei { position: absolute; inset: 0; }
 .pin-frei i { position: absolute; border-radius: 1.5rem; box-shadow: 0 1.4rem 3rem -1.2rem rgba(0, 0, 0, .35); will-change: translate; }
-.pin-frei .f1 { left: calc(68% + var(--gh) * .29); top: 22%; width: calc(var(--gh) * .25); aspect-ratio: 3 / 4; translate: 0 calc(var(--t, 0) * -10vh); }
-.pin-frei .f2 { left: calc(68% + var(--gh) * .31); top: 56%; width: calc(var(--gh) * .21); aspect-ratio: 2 / 3; translate: 0 calc(var(--t, 0) * -20vh); }
-.pin-frei .f3 { left: calc(68% - var(--gh) * .5); top: 64%; width: calc(var(--gh) * .19); aspect-ratio: 1; translate: 0 calc(var(--t, 0) * -15vh); }
+.pin-frei .f1 { left: calc(68% + var(--gh) * .29); top: 22%; width: calc(var(--gh) * .25); aspect-ratio: 3 / 4; translate: 0 calc(var(--t) * -10vh); }
+.pin-frei .f2 { left: calc(68% + var(--gh) * .31); top: 56%; width: calc(var(--gh) * .21); aspect-ratio: 2 / 3; translate: 0 calc(var(--t) * -20vh); }
+.pin-frei .f3 { left: calc(68% - var(--gh) * .5); top: 64%; width: calc(var(--gh) * .19); aspect-ratio: 1; translate: 0 calc(var(--t) * -15vh); }
 .pin { background: #fff; color: #111; }
 /* Suche und Profil bleiben oben stehen, die Pinnwand läuft darunter durch */
 .pin::before { content: ""; position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 10.6em; background: #fff; }
@@ -1684,14 +1817,14 @@ html.kanalfilm .k-tiktok .kanal-text strong { text-shadow: -.035em -.02em 0 rgba
 .pin-profil > span { display: grid; gap: .1em; }
 .pin-profil small { color: #767676; }
 .pin-raster { display: flex; gap: .55em; padding: 0 .55em; }
-.pin-spalte { display: flex; flex: 1; flex-direction: column; gap: .55em; translate: 0 calc(var(--t, 0) * -20%); will-change: translate; }
-.pin-spalte + .pin-spalte { translate: 0 calc(4em - var(--t, 0) * 32%); }
+.pin-spalte { display: flex; flex: 1; flex-direction: column; gap: .55em; translate: 0 calc(var(--t) * -20%); will-change: translate; }
+.pin-spalte + .pin-spalte { translate: 0 calc(4em - var(--t) * 32%); }
 .pin-kachel { border-radius: 1.1em; }
 .h-a { aspect-ratio: 3 / 4; }
 .h-b { aspect-ratio: 1; }
 .h-c { aspect-ratio: 2 / 3; }
 .pin-merken { position: absolute; right: .6em; top: .6em; display: grid; }
-.pin-merken > span { grid-area: 1 / 1; padding: .55em .95em; border-radius: 999px; color: #fff; font-size: .95em; font-weight: 700; text-align: center; }
+.pin-merken > span { --merken: clamp(0, (var(--t) - .58) * 10, 1); --ablauf: .58 .68; grid-area: 1 / 1; padding: .55em .95em; border-radius: 999px; color: #fff; font-size: .95em; font-weight: 700; text-align: center; }
 .pin-merken .pm-1 { background: #e60023; opacity: calc(1 - var(--merken)); }
 .pin-merken .pm-2 { background: #111; opacity: var(--merken); }
 .pin-nav { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; height: 5em; padding-bottom: 1em; display: flex; justify-content: space-around; align-items: center; background: #fff; color: #111; }
@@ -1703,7 +1836,8 @@ html.kanalfilm .kanal-wahl {
   display: flex;
   position: absolute;
   z-index: 10;
-  top: 7rem;
+  /* mit Abstand unter der Kopfzeile; deren echte Höhe misst kanaele.js (--kopfzeile) */
+  top: calc(var(--kopfzeile, 6.2rem) + .8rem);
   right: var(--kante);
   gap: .55rem;
 }
@@ -1721,11 +1855,13 @@ html.kanalfilm .kanal-wahl a:hover { scale: 1.08; }
 html.kanalfilm .kanal-wahl .icon { width: 1.15rem; height: 1.15rem; }
 html.kanalfilm .kanal-wahl .kw-tiktok .icon { filter: drop-shadow(-1px -1px 0 #25f4ee) drop-shadow(1px 1px 0 #fe2c55); }
 html.kanalfilm .kanal-wahl a[aria-current="true"] { border-color: transparent; background: var(--wahl-akt-bg); color: var(--wahl-akt-fg); scale: 1.1; }
-.kanal-buehne[data-aktiv="tiktok"] { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .35); --wahl-akt-bg: #fff; --wahl-akt-fg: #000; }
-.kanal-buehne[data-aktiv="youtube"] { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .3); --wahl-akt-bg: #ff0033; --wahl-akt-fg: #fff; }
-.kanal-buehne[data-aktiv="instagram"] { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .55); --wahl-akt-bg: #fff; --wahl-akt-fg: #d62976; }
-.kanal-buehne[data-aktiv="facebook"] { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .55); --wahl-akt-bg: #fff; --wahl-akt-fg: #1877f2; }
-.kanal-buehne[data-aktiv="pinterest"] { --wahl-fg: #111; --wahl-rand: rgba(0, 0, 0, .2); --wahl-akt-bg: #e60023; --wahl-akt-fg: #fff; }
+/* Farben der Auswahl je aktiver Szene: an der Auswahl selbst, nicht an der Bühne (dort erbten alle Szenen die
+   Werte, und jeder Wechsel ließe den Browser die ganze Bühne neu berechnen) */
+.kanal-buehne[data-aktiv="tiktok"] .kanal-wahl { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .35); --wahl-akt-bg: #fff; --wahl-akt-fg: #000; }
+.kanal-buehne[data-aktiv="youtube"] .kanal-wahl { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .3); --wahl-akt-bg: #ff0033; --wahl-akt-fg: #fff; }
+.kanal-buehne[data-aktiv="instagram"] .kanal-wahl { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .55); --wahl-akt-bg: #fff; --wahl-akt-fg: #d62976; }
+.kanal-buehne[data-aktiv="facebook"] .kanal-wahl { --wahl-fg: #fff; --wahl-rand: rgba(255, 255, 255, .55); --wahl-akt-bg: #fff; --wahl-akt-fg: #1877f2; }
+.kanal-buehne[data-aktiv="pinterest"] .kanal-wahl { --wahl-fg: #111; --wahl-rand: rgba(0, 0, 0, .2); --wahl-akt-bg: #e60023; --wahl-akt-fg: #fff; }
 /* Markenhinweis: in der Einleitung unten links, verschwindet mit dem Kopf */
 html.kanalfilm .kanal-hinweis {
   position: absolute;
@@ -1741,21 +1877,38 @@ html.kanalfilm .kanal-hinweis {
 /* Hochformat (Handy): Gerät oben, Text darunter, Auswahl mittig unter der Kopfzeile */
 @media (max-aspect-ratio: 11/10) {
   html.kanalfilm .kanal-buehne { --gh: min(50svh, 30rem); --quer-skala: .34; }
-  html.kanalfilm .kanal-szene { perspective-origin: 50% 44%; }
-  .geraet { left: 50%; top: 44%; }
+  html.kanalfilm .kanal-szene { perspective-origin: 50% var(--geraet-y, 44%); }
+  .geraet { left: 50%; top: var(--geraet-y, 44%); }
   html.kanalfilm .kanal,
   html.kanalfilm .kanal:visited { left: var(--kante); right: var(--kante); top: auto; bottom: 1.3rem; width: auto; translate: none; }
   html.kanalfilm .kanal-text strong { font-size: clamp(2.3rem, 11vw, 3.4rem); font-size: min(3.6rem, 16cqi); }
   html.kanalfilm .kanal-name { margin-top: .3rem; font-size: 1rem; }
   html.kanalfilm .kanal-zeile { display: none; }
   html.kanalfilm .kanal-los { margin-top: .9rem; padding: .7rem 1.1rem; font-size: .9rem; }
-  html.kanalfilm .kanal-wahl { top: 5.7rem; right: auto; left: 50%; translate: -50% 0; gap: .45rem; }
+  html.kanalfilm .kanal-wahl { top: calc(var(--kopfzeile, 4.9rem) + .8rem); right: auto; left: 50%; translate: -50% 0; gap: .45rem; }
   html.kanalfilm .kanal-wahl a { width: 2.4rem; height: 2.4rem; }
   .pin-frei, .ig-schweben, .fb-schweben { display: none; }
 }
 @media (max-aspect-ratio: 11/10) and (max-height: 44rem) {
   html.kanalfilm .kanal-buehne { --gh: min(44svh, 26rem); }
   html.kanalfilm .kanal-los { display: none; }
+}
+/* niedrige Fenster im Querformat (flache Fenster, Handy quer): Text mittig im Raum unter der Kopfzeile
+   (deren echte Höhe misst kanaele.js), Schrift nach der Höhe; die schwebenden Zeichen oben in der Mitte
+   entfallen (sie lägen auf dem Namen der Plattform) */
+@media (min-aspect-ratio: 11/10) and (max-height: 36rem) {
+  html.kanalfilm .kanal,
+  html.kanalfilm .kanal:visited { top: calc(var(--kopfzeile, var(--kopf-h)) + (100% - var(--kopfzeile, var(--kopf-h))) / 2); }
+  html.kanalfilm .kanal-text strong { font-size: clamp(2rem, min(16cqi, 16svh), 5rem); }
+  html.kanalfilm .kanal-name { margin-top: .4rem; font-size: 1rem; }
+  html.kanalfilm .kanal-zeile { margin-top: .5rem; font-size: .95rem; line-height: 1.4; }
+  html.kanalfilm .kanal-los { margin-top: 1rem; padding: .6rem 1.05rem; font-size: .88rem; }
+  html.kanalfilm .kanal-buehne > .kanal-kopf { padding-top: var(--kopf-h); }
+  .ig-schweben.s1, .fb-schweben.s1 { display: none; }
+  .pin-frei .f1 { top: max(22%, calc(var(--kopfzeile, var(--kopf-h)) + 4.4rem + 10vh)); }
+}
+@media (min-aspect-ratio: 11/10) and (max-height: 28rem) {
+  html.kanalfilm .kanal-zeile { display: none; }
 }
 
 .panel {
@@ -2001,10 +2154,10 @@ html.bewegt .hero-text.ein > :not(h1) {
 html.bewegt h2 .teil .stueck { translate: 0 106%; }
 html.bewegt h2.sichtbar .teil .stueck { translate: 0 0; transition: translate .9s cubic-bezier(.16, 1, .3, 1) calc(var(--i, 0) * .06s); }
 
-/* Titel der Filmkapitel: an das Scrollen gekoppelt (--in, --out kommen von film.js) */
+/* Titel der Filmkapitel: an das Scrollen gekoppelt (--in, --out setzt film3d/haupt.js an jedes Wort) */
 html.film-an .kap-text > .kap-titel { translate: none; }
 html.bewegt .kap-titel .teil .stueck {
-  translate: 0 calc((1 - clamp(0, (var(--in, 1) - .3) * 3.2 - var(--i, 0) * .22, 1)) * 108% - var(--out, 0) * 70%);
+  translate: 0 calc((1 - clamp(0, (var(--in) - .3) * 3.2 - var(--i, 0) * .22, 1)) * 108% - var(--out) * 70%);
 }
 
 /* Gruppen erscheinen gestaffelt */
@@ -2016,19 +2169,36 @@ html.bewegt .knopf-link {
   transition: background-color .3s var(--ease), border-color .3s var(--ease), color .3s var(--ease), translate .5s cubic-bezier(.34, 1.56, .64, 1);
 }
 
+/* „Bewegung reduzieren“: nichts bewegt sich von selbst (Dauerbewegungen enden sofort, Übergänge entfallen).
+   Die beiden Filme laufen gedämpft weiter (Einstellung in film.js): nur mit dem Scrollen, mit kurzen
+   Überblendungen im Kreis; Texte, Himmel und Geräte blenden nur ein und aus, statt zu wandern.
+   Übergänge ganz aus (0 s, ohne Verzögerung), nicht nur sehr kurz: Sonst startet jede Änderung beim Scrollen
+   einen winzigen Übergang (die Eigenschaft gilt für alles), und der Browser rechnet den Stil doppelt (am PC
+   mit vierfach gedrosselter CPU in den Kanälen 73 % der Zeit). */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
   [data-reveal].is-armed { opacity: 1; translate: 0 0; }
+  html.film-an .film-anker,
+  html.film-an .film-3d { transition-duration: .25s !important; }
+  html.film-an .hero-text,
+  html.film-an .himmel-sterne,
+  html.film-an .kap-text > *,
+  html.kanalfilm .kanal-buehne > .kanal-kopf,
+  html.kanalfilm .kanal-text > *,
+  html.kanalfilm .kanal-los { translate: none; }
+  html.kanalfilm .kanal-buehne { --auf-weg: 0px; }
 }
 html.ruhe *, html.ruhe *::before, html.ruhe *::after {
   animation-duration: .01ms !important;
   animation-iteration-count: 1 !important;
-  transition-duration: .01ms !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
   scroll-behavior: auto !important;
 }
 html.ruhe [data-reveal].is-armed { opacity: 1; translate: 0 0; }

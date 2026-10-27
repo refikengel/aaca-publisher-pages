@@ -3,9 +3,10 @@
 
   Gerendert wird nur der Kreis der Skala (ein quadratisches Canvas, per CSS rund beschnitten).
   Qualitätsstufen: 3 = weiche Schatten 2048, vierfache Kantenglättung; 2 = Schatten 1024;
-  1 = Schatten 512, Glühen in halber Auflösung, Pixeldichte 1; 0 = leicht: keine Schatten, kein
-  Glühen, kein Korn, keine Kantenglättung, kein schwebender Staub, Pixeldichte 0,6 (das Bild wird
-  vergrößert angezeigt). Stufe 0 ist für schwache Geräte und Grafik ohne Beschleunigung gedacht.
+  1 = Schatten 512, Glühen in halber Auflösung, Pixeldichte bis 1,5; 0 = leicht: keine Schatten, kein
+  Glühen, kein Korn, kein schwebender Staub, statt Mehrfachabtastung eine günstige Kantenglättung
+  (FXAA), Pixeldichte bis 1,5. Stufe 0 ist für schwache Geräte gedacht; Geräte ohne schnelle Grafik zeigen
+  statt des Echtzeitbilds die vorberechnete Bildfolge (folge.js).
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoomEnvironment } from "../vendor/three/addons/environments/RoomEnvironment.js";
@@ -14,6 +15,36 @@ import { RenderPass } from "../vendor/three/addons/postprocessing/RenderPass.js"
 import { ShaderPass } from "../vendor/three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "../vendor/three/addons/postprocessing/OutputPass.js";
 import { UnrealBloomPass } from "../vendor/three/addons/postprocessing/UnrealBloomPass.js";
+
+// günstige Kantenglättung für Stufe 0 nach dem Prinzip von FXAA (NVIDIA): Helligkeit an vier diagonalen
+// Nachbarn, daraus die Kantenrichtung, entlang der Kante zweimal nachtasten; ohne Schleifen (keine
+// Warnungen beim Übersetzen, gleich schnell auf allen Geräten). resolution = 1 / Pixelgröße des Bildes
+const KantenShader = {
+  uniforms: { tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(1 / 512, 1 / 512) } },
+  vertexShader: "varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+  fragmentShader: [
+    "uniform sampler2D tDiffuse; uniform vec2 resolution; varying vec2 vUv;",
+    "float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }",
+    "void main() {",
+    "  vec4 mitte = texture2D(tDiffuse, vUv);",
+    "  float lNW = luma(texture2D(tDiffuse, vUv + vec2(-1.0, -1.0) * resolution).rgb);",
+    "  float lNE = luma(texture2D(tDiffuse, vUv + vec2(1.0, -1.0) * resolution).rgb);",
+    "  float lSW = luma(texture2D(tDiffuse, vUv + vec2(-1.0, 1.0) * resolution).rgb);",
+    "  float lSE = luma(texture2D(tDiffuse, vUv + vec2(1.0, 1.0) * resolution).rgb);",
+    "  float lM = luma(mitte.rgb);",
+    "  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));",
+    "  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));",
+    "  vec2 richtung = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));",
+    "  float daempfung = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);",
+    "  float kehr = 1.0 / (min(abs(richtung.x), abs(richtung.y)) + daempfung);",
+    "  richtung = clamp(richtung * kehr, vec2(-8.0), vec2(8.0)) * resolution;",
+    "  vec3 a = 0.5 * (texture2D(tDiffuse, vUv - richtung * 0.1667).rgb + texture2D(tDiffuse, vUv + richtung * 0.1667).rgb);",
+    "  vec3 b = 0.5 * a + 0.25 * (texture2D(tDiffuse, vUv - richtung * 0.5).rgb + texture2D(tDiffuse, vUv + richtung * 0.5).rgb);",
+    "  float lB = luma(b);",
+    "  gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, mitte.a);",
+    "}"
+  ].join("\n")
+};
 
 const KornShader = {
   uniforms: { tDiffuse: { value: null }, uZeit: { value: 0 }, uKorn: { value: 0.022 }, uVignette: { value: 0.3 } },
@@ -57,12 +88,7 @@ export class Welt {
     var sz = this.szene = new THREE.Scene();
     sz.background = this.hintergrund();
     sz.fog = new THREE.FogExp2(0x070b16, 0.028);
-    var pm = new THREE.PMREMGenerator(r);
-    var raum = new RoomEnvironment();
-    sz.environment = pm.fromScene(raum, 0.035).texture;
-    sz.environmentIntensity = 0.62;
-    raum.traverse(function (o) { if (o.geometry) { o.geometry.dispose(); } if (o.material) { o.material.dispose(); } });
-    pm.dispose();
+    // die Umgebung (Spiegelungen) kommt mit umgebungBauen(), als eigener Schritt der Vorbereitung
 
     var k = this.kamera = new THREE.PerspectiveCamera(25, 1, 0.1, 80);
     k.position.set(0, 4.1, 11.2);
@@ -94,6 +120,40 @@ export class Welt {
     this.pixel = 1;
     this.css = 1;
     this.setzeStufe(stufe);
+  }
+
+  // Umgebung für Spiegelungen und weiches Licht (ein Raum, vorab weichgezeichnet): nicht im Konstruktor,
+  // sondern in zwei Schritten der Vorbereitung. umgebungVorbereiten() lässt die Shader des Raums und des
+  // Weichzeichners nebenher übersetzen (Promise: fertig), umgebungBauen() rendert dann ohne Warten. Der
+  // Weichzeichner wird über interne Methoden von three.js r170 vorbereitet; geht das nicht, übersetzt
+  // umgebungBauen ihn eben selbst (dauert nur länger).
+  umgebungVorbereiten() {
+    var r = this.renderer, ziel = r.getRenderTarget(), stoffe = new Set();
+    var pm = this.pm = new THREE.PMREMGenerator(r);
+    var raum = this.raum = new RoomEnvironment();
+    var hilfsziel = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    try {
+      r.setRenderTarget(hilfsziel);
+      r.compile(raum, new THREE.PerspectiveCamera(90, 1, 0.1, 100)).forEach(function (m) { stoffe.add(m); });
+      try {
+        pm._setSize(256);
+        pm._allocateTargets().dispose();
+        pm._compileMaterial(pm._blurMaterial);
+        stoffe.add(pm._blurMaterial);
+      } catch (fehler) { /* andere three.js-Fassung: dann ohne */ }
+    } finally {
+      r.setRenderTarget(ziel);
+    }
+    return this.warten(stoffe, true).then(function () { hilfsziel.dispose(); });
+  }
+
+  umgebungBauen() {
+    var pm = this.pm || new THREE.PMREMGenerator(this.renderer), raum = this.raum || new RoomEnvironment();
+    this.szene.environment = pm.fromScene(raum, 0.035).texture;
+    this.szene.environmentIntensity = 0.62;
+    raum.traverse(function (o) { if (o.geometry) { o.geometry.dispose(); } if (o.material) { o.material.dispose(); } });
+    pm.dispose();
+    this.pm = this.raum = null;
   }
 
   hintergrund() {
@@ -206,34 +266,62 @@ export class Welt {
     if (this.css > 1) { this.groesse(this.css, this.dprWunsch || 1); }
   }
 
-  // Shader vorab übersetzen, ohne zu blockieren (compileAsync). faelle: [{ ebenen, wurzeln }]. three.js (r170)
-  // übersetzt dabei mit dem Schnittebenen-Zustand des zuletzt gezeichneten Stoffs, nicht mit dem des jeweiligen
-  // Stoffs; im Film haben fast alle Stoffe eine Schnittebene (den Scan), die Maschine keine, das Skript-Blatt
-  // zwei. Deshalb vor jedem Fall ein winziges Bild mit einem Stoff mit genau so vielen Ebenen. Übersetzt wird
-  // für das Zwischenbild der Nachbearbeitung (linear, Tonwerte erst am Ende), in das auch gezeichnet wird. So
-  // muss beim ersten Bild einer Szene kaum noch etwas nacheinander und blockierend nachübersetzt werden.
-  uebersetzen(faelle, kamera) {
-    var r = this.renderer, ziel = r.getRenderTarget(), zusagen = [], i, j;
-    var klein = new THREE.WebGLRenderTarget(1, 1), probe = new THREE.Scene();
-    var flaeche = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
-    flaeche.frustumCulled = false;
-    probe.add(flaeche);
+  // Shader vorab übersetzen, Stoff für Stoff, ohne auf den Treiber zu warten (der übersetzt nebenher, wo er
+  // kann). three.js (r170) übersetzt dabei mit dem Schnittebenen-Zustand des zuletzt gezeichneten Stoffs, nicht
+  // mit dem des jeweiligen Stoffs; im Film haben fast alle Stoffe eine Schnittebene (den Scan), die Maschine
+  // keine, das Skript-Blatt zwei. Darum: schnittebenen(n) zeichnet ein winziges Bild mit einem Stoff mit n
+  // Ebenen, danach übersetzt uebersetzen(objekt) die Stoffe von Objekten mit genau n Ebenen (nur das Objekt,
+  // ohne seine Kinder), und zwar für das Zwischenbild der Nachbearbeitung (linear, Tonwerte erst am Ende), in
+  // das auch gezeichnet wird. So entsteht jeder Shader einmal, passend, und beim ersten Bild einer Szene muss
+  // kaum noch etwas blockierend nachübersetzt werden. warten(stoffe) ist erfüllt, wenn alle fertig sind.
+  schnittebenen(n) {
+    var r = this.renderer, ziel = r.getRenderTarget();
+    if (!this.probe) {
+      var flaeche = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+      flaeche.frustumCulled = false;
+      this.probe = { ziel: new THREE.WebGLRenderTarget(1, 1), szene: new THREE.Scene(), flaeche: flaeche, ebenen: [new THREE.Plane(), new THREE.Plane(), new THREE.Plane()] };
+      this.probe.szene.add(flaeche);
+    }
+    var p = this.probe;
     try {
-      for (i = 0; i < faelle.length; i++) {
-        flaeche.material.clippingPlanes = faelle[i].ebenen.length ? faelle[i].ebenen : null;
-        flaeche.material.needsUpdate = true;
-        r.setRenderTarget(klein);
-        r.render(probe, kamera);
-        r.setRenderTarget(this.composer.readBuffer);
-        for (j = 0; j < faelle[i].wurzeln.length; j++) { zusagen.push(r.compileAsync(faelle[i].wurzeln[j], kamera, this.szene)); }
-      }
+      p.flaeche.material.clippingPlanes = n ? p.ebenen.slice(0, n) : null;
+      p.flaeche.material.needsUpdate = true;
+      r.setRenderTarget(p.ziel);
+      r.render(p.szene, this.kamera);
     } finally {
       r.setRenderTarget(ziel);
     }
-    return Promise.all(zusagen).then(function () {
-      klein.dispose();
-      flaeche.geometry.dispose();
-      flaeche.material.dispose();
+  }
+
+  // die Stoffe eines Objekts (ohne Kinder) übersetzen; liefert die Menge der Stoffe (für warten)
+  uebersetzen(objekt) {
+    var r = this.renderer, ziel = r.getRenderTarget(), kinder = objekt.children;
+    objekt.children = [];
+    try {
+      r.setRenderTarget(this.composer.readBuffer);
+      return r.compile(objekt, this.kamera, this.szene);
+    } finally {
+      objekt.children = kinder;
+      r.setRenderTarget(ziel);
+    }
+  }
+
+  // erfüllt, wenn die Shader aller stoffe fertig sind; ohne behalten wird danach auch die Probe freigegeben
+  warten(stoffe, behalten) {
+    var eig = this.renderer.properties, probe = this.probe;
+    if (probe && !behalten) {
+      this.probe = null;
+      probe.ziel.dispose(); probe.flaeche.geometry.dispose(); probe.flaeche.material.dispose();
+    }
+    return new Promise(function (fertig) {
+      (function pruefen() {
+        var offen = false;
+        stoffe.forEach(function (m) {
+          var p = eig.get(m).currentProgram;
+          if (p && !p.isReady()) { offen = true; }
+        });
+        if (offen) { window.setTimeout(pruefen, 16); } else { fertig(); }
+      })();
     });
   }
 
@@ -259,8 +347,9 @@ export class Welt {
     c.addPass(new RenderPass(this.szene, this.kamera));
     this.bloom = null;
     this.korn = null;
-    // Stufe 0: nur Bild und Ausgabe (Tonwerte, Farbraum). Der Weg über das Renderziel bleibt, damit die
-    // Shader dieselben bleiben wie auf den höheren Stufen (kein Neuübersetzen beim Wechsel).
+    this.fxaa = null;
+    // Stufe 0: nur Bild, Ausgabe (Tonwerte, Farbraum) und FXAA. Der Weg über das Renderziel bleibt, damit
+    // die Shader dieselben bleiben wie auf den höheren Stufen (kein Neuübersetzen beim Wechsel).
     if (this.stufe > 0) {
       // nur echtes Leuchten (Augen, Heiligenschein, Scanstrahl) glüht, helle Flächen nicht
       // dezent: geringe Stärke, enger Radius, hohe Schwelle (das Glühen soll keine Details überstrahlen)
@@ -271,6 +360,10 @@ export class Welt {
     if (this.stufe > 0) {
       var korn = this.korn = new ShaderPass(KornShader);
       c.addPass(korn);
+    } else {
+      // Kantenglättung nach der Ausgabe (FXAA arbeitet auf den fertigen Farben)
+      var fxaa = this.fxaa = new ShaderPass(KantenShader);
+      c.addPass(fxaa);
     }
   }
 
@@ -278,7 +371,8 @@ export class Welt {
   groesse(css, dpr) {
     this.css = css;
     this.dprWunsch = dpr;
-    var d = this.stufe === 0 ? Math.min(dpr, 1) * 0.6 : (this.stufe === 1 ? Math.min(dpr, 1) : Math.min(dpr, 2));
+    // Stufe 1 und 0 höchstens 1,5-fach: auf Handys (Pixeldichte 3) sonst sichtbar grob, am Rechner (1) gleich
+    var d = this.stufe <= 1 ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
     // nie mehr als etwa 2,6 Millionen Pixel rendern
     while (css * css * d * d > 2600000 && d > 1) { d -= 0.25; }
     this.pixel = d;
@@ -288,6 +382,7 @@ export class Welt {
     this.composer.setPixelRatio(d);
     this.composer.setSize(css, css);
     if (this.stufe === 1 && this.bloom) { this.bloom.resolution.set(css * d * 0.5, css * d * 0.5); }
+    if (this.fxaa) { this.fxaa.material.uniforms.resolution.value.set(1 / (css * d), 1 / (css * d)); }
     this.kamera.aspect = 1;
     this.kamera.updateProjectionMatrix();
     this.staubStoff.uniforms.uPixel.value = d * css / 600;

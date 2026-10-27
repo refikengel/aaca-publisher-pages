@@ -4,7 +4,10 @@
 */
 export const NAMEN = {
   de: ["IT-ENGEL", "THEMA", "SKRIPT", "STIMME", "QUELLEN", "FREIGABE", "KANÄLE", "ZIEL"],
-  en: ["IT-ENGEL", "TOPIC", "SCRIPT", "VOICE", "SOURCES", "APPROVAL", "CHANNELS", "GOAL"]
+  en: ["IT-ENGEL", "TOPIC", "SCRIPT", "VOICE", "SOURCES", "APPROVAL", "CHANNELS", "GOAL"],
+  // nur für die vorberechnete Bildfolge (_werkzeuge/bildfolge_rendern.mjs): ohne Wörter, damit dieselben Bilder
+  // zu beiden Sprachen passen (auf den Platten stehen dann nur die Nummern)
+  neutral: ["IT-ENGEL", "", "", "", "", "", "", "IT-ENGEL"]
 };
 
 export const SCHRIFT = '"Raleway", system-ui, sans-serif';
@@ -13,7 +16,8 @@ export const SCHRIFT = '"Raleway", system-ui, sans-serif';
 export const ZIFFERN = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
 
 export function sprache() {
-  return document.documentElement.getAttribute("data-sprache") === "en" ? "en" : "de";
+  var s = document.documentElement.getAttribute("data-sprache");
+  return s === "en" || s === "neutral" ? s : "de";
 }
 
 export function namen() { return NAMEN[sprache()]; }
