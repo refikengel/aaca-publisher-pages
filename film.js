@@ -34,9 +34,16 @@
               in denen die Bildfolge überbrückt)
 
      Rechner mit Grafikkarte bekommen immer Echtzeit-3D (bis es bereit ist, überbrückt die Bildfolge),
-     Rechner ohne schnelle Grafik und sehr schwache Geräte immer die Bildfolge. */
+     Rechner ohne schnelle Grafik und sehr schwache Geräte immer die Bildfolge.
+
+     WEICHES_SCROLLEN: Soll die Seite das Mausrad selbst weich nachführen (Prinzip wie Lenis)?
+       false  der Browser scrollt selbst (Standard): bleibt auf jedem Gerät flüssig, auch wenn der Film
+              Zeit braucht, denn das Scrollen läuft dann im Compositor, unabhängig vom Hauptthread
+       true   die Seite fängt das Mausrad ab und scrollt per Skript: weicher Auslauf, aber das ganze
+              Scrollen hängt an der Rechenzeit des Hauptthreads und ruckelt auf schwachen Geräten */
   var BEI_REDUZIERTER_BEWEGUNG = "gedämpft";
   var BILDFOLGE_AUF_TOUCH = true;
+  var WEICHES_SCROLLEN = false;
 
   var reduziertAus = BEI_REDUZIERTER_BEWEGUNG === "aus";
   // dieselbe Haltung gilt für die Kanäle (kanaele.js) und die Pause-Taste (site.js): beide lesen sie hier ab
@@ -72,9 +79,9 @@
     root.classList.add("film-an");
     knopfAnpassen();
     try {
-      import("./film3d/haupt.js?v=10").then(function (m) {
+      import("./film3d/haupt.js?v=11").then(function (m) {
         modul = m;
-        m.start({ erzwungen: erzwungen, reduziertAus: reduziertAus, folgeAufTouch: BILDFOLGE_AUF_TOUCH });
+        m.start({ erzwungen: erzwungen, reduziertAus: reduziertAus, folgeAufTouch: BILDFOLGE_AUF_TOUCH, weichesRad: WEICHES_SCROLLEN });
       }, function () { geladen = false; ausGrund = "fehler"; zurueck(); knopfAnpassen(); });
     } catch (fehler) {
       geladen = false;
@@ -126,4 +133,15 @@
     [mqReduce, mqForced].forEach(function (m) { if (m && m.addEventListener) { m.addEventListener("change", laden); } });
   }
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", bereit); } else { bereit(); }
+
+  // Diagnose-Anzeige (Gerät, Film-Zustand, Bildrate; „Kopieren“ legt alles als Text ab): nur mit ?diag in der
+  // Adresse, sonst wird diag.js nie geladen
+  if (/[?&]diag(?:=|&|#|$)/.test(window.location.search)) {
+    var diagLaden = function () {
+      var s = document.createElement("script");
+      s.src = "diag.js?v=11";
+      document.head.appendChild(s);
+    };
+    if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", diagLaden); } else { diagLaden(); }
+  }
 })();

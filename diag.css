@@ -1,0 +1,31 @@
+/* Diagnose-Anzeige (nur mit ?diag, siehe diag.js) */
+#diag {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2147483000;
+  max-width: min(calc(100vw - 16px), 46rem);
+  max-height: 55vh;
+  overflow: auto;
+  padding: 8px 10px 6px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 8px;
+  background: rgba(8, 10, 18, .88);
+  color: #e8ecf5;
+  font: 11px/1.35 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+#diag pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; color: inherit; }
+#diag .diag-knoepfe { display: flex; gap: 8px; margin-top: 6px; position: sticky; bottom: -6px; background: rgba(8, 10, 18, .95); padding: 4px 0; }
+#diag button {
+  font: inherit;
+  padding: 6px 12px;
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, .5);
+  border-radius: 6px;
+  background: #27324d;
+  color: #fff;
+  cursor: pointer;
+}
+#diag button:focus-visible { outline: 2px solid #e3b45d; outline-offset: 2px; }

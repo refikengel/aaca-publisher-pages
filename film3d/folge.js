@@ -90,9 +90,11 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
       }
       laden();
     };
-    bild.onload = function () {
-      if (bild.decode) { bild.decode().then(function () { ende(true); }, function () { ende(true); }); } else { ende(true); }
-    };
+    // nicht vorab dekodieren (img.decode()): das läuft im Hauptthread (am Rechner etwa 4 ms je Bild, auf einem
+    // Handy leicht das Fünffache), für alle Bilder der Folge gleich nach dem Laden der Seite, und der Browser
+    // wirft die dekodierten Bilder bald wieder weg. Beim Zeichnen dekodiert er selbst (mit Grafikbeschleunigung
+    // in einem Hilfsthread, ohne den Hauptthread aufzuhalten).
+    bild.onload = function () { ende(true); };
     bild.onerror = function () { ende(false); };
     bild.src = adresse(k);
   }
@@ -170,12 +172,9 @@ export function baue(leinwand, neuZeichnen, fehler, optionen) {
         if (fertig[start]) { aufgeloest(true); laden(); return; }
         var probe = new Image();
         probe.onload = function () {
-          var weiter = function () {
-            bilder[start] = probe; fertig[start] = true; angefragt[start] = true;
-            aufgeloest(!aus);
-            laden();
-          };
-          if (probe.decode) { probe.decode().then(weiter, weiter); } else { weiter(); }
+          bilder[start] = probe; fertig[start] = true; angefragt[start] = true;
+          aufgeloest(!aus);
+          laden();
         };
         probe.onerror = function () { abgelehnt(new Error("Bildfolge nicht ladbar")); };
         angefragt[start] = true;

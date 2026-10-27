@@ -23,8 +23,11 @@
   Kreis zu wenig Pixel haben (folgeScharf) und das Gerät 3D schafft, bleibt es bei Echtzeit-3D, ebenso nur mit
   dem Scrollen bewegt. Dazu keine Dauerschleife, kein Nachgleiten und kein weiches Mausrad.
 
-  Weiches Scrollen: Mausrad und Touchpad werden sanft nachgeführt (Prinzip wie Lenis), Tastatur,
-  Bildlaufleiste und Touch bleiben unverändert. Alles hier ist Zusatz: Ohne Skript, bei erzwungenen Farben
+  Scrollen: Der Browser scrollt selbst (Mausrad, Touchpad, Tastatur, Leiste, Touch), das bleibt auch dann
+  flüssig, wenn der Film auf einem schwachen Gerät Zeit braucht: das Scrollen läuft im Compositor, nicht im
+  Hauptthread. Ein eigenes weiches Nachführen des Mausrads (Prinzip wie Lenis) gibt es nur noch als
+  Einstellung WEICHES_SCROLLEN in film.js (Standard aus): es hängt das ganze Scrollen an den Hauptthread, und
+  die Seite scrollt dann so ruckelig, wie dieser gerade rechnet. Alles hier ist Zusatz: Ohne Skript, bei erzwungenen Farben
   und nach der Pause-Taste bleibt die Seite eine normale, vollständig lesbare Seite. Es wird nichts
   gespeichert und nichts gesendet; nachgeladen werden nur eigene Dateien (Module, Bilder der Folge).
 
@@ -49,8 +52,8 @@ var mqHell = mq("(prefers-color-scheme: light)");
 var mqGrob = mq("(pointer: coarse)");
 
 // Einstellungen aus film.js (siehe dort): reduziertAus = bei „Bewegung reduzieren“ aus statt gedämpft,
-// folgeAufTouch = Touch-Geräte bekommen die Bildfolge statt Echtzeit-3D
-var reduziertAus = false, folgeAufTouch = true;
+// folgeAufTouch = Touch-Geräte bekommen die Bildfolge statt Echtzeit-3D, weichesRad = eigenes weiches Mausrad
+var reduziertAus = false, folgeAufTouch = true, weichesRad = false;
 // erzwungen: der Besucher hat „Film trotzdem starten“ geklickt; kaputt: der Film selbst ist ausgefallen
 // (Fehler im Skript, Bilder nicht ladbar), dann kein neuer Versuch bis zum Klick
 var erzwungen = false, kaputt = false;
@@ -102,7 +105,32 @@ function grundFuerFolge() {
   var n = window.navigator || {};
   if (n.hardwareConcurrency && n.hardwareConcurrency <= 2) { return "wenige Kerne"; }
   if (n.deviceMemory && n.deviceMemory <= 2) { return "wenig Speicher"; }
+  if (rechenfaktor() > LANGSAM_AB) { return "langsames Gerät"; }
   return "";
+}
+
+// Wie viel langsamer als ein schneller Rechner (Faktor 1 = AMD Ryzen 5 3600X) rechnet dieses Gerät im Hauptthread?
+// Eine kleine feste Rechenaufgabe, einmal beim Start (wenige Millisekunden, am Rechner etwa 5 ms). Sie dient nur
+// dazu, sehr schwache Geräte auszusortieren, bevor Echtzeit-3D vorbereitet wird: das Vorbereiten kostet dort
+// mehrere Sekunden Hauptthread-Zeit (die Seite steht in dieser Zeit still) und wird danach oft doch verworfen.
+// Die Bildfolge sieht gleich aus und läuft auf jedem Gerät. Der Faktor steht in data-film-faktor (Diagnose).
+// Erscheint das Gerät zu langsam, wird bis zu zweimal nachgemessen und der beste Lauf gezählt: ein einzelner Hänger
+// (anderes Programm, Hintergrundarbeit) soll kein schnelles Gerät aussortieren.
+var REFERENZ_MS = 5.5, LANGSAM_AB = 4;
+function rechenfaktor() {
+  var best = 1e9, f = 0, k, i, x, t0;
+  try {
+    for (k = 0; k < 3; k++) {
+      t0 = window.performance.now(); x = 0;
+      for (i = 0; i < 2000000; i++) { x += Math.sqrt(i) * 1.0000001; }
+      t0 = window.performance.now() - t0;
+      if (x >= 0 && t0 < best) { best = t0; }
+      if (best / REFERENZ_MS <= LANGSAM_AB) { break; }
+    }
+    f = best < 1e9 ? best / REFERENZ_MS : 0;
+  } catch (fehler) { f = 0; }
+  root.setAttribute("data-film-faktor", f.toFixed(1));
+  return f;
 }
 
 function hexRgb(text, ersatz) {
@@ -128,7 +156,7 @@ var skala;
 // vorbereitet wird ({ art, quelle, laeuft }); geht = die vorige, die noch ausgeblendet wird ({ quelle, bis });
 // ziel = die beste Quelle für dieses Gerät; folgeKaputt = die Bilder der Folge ließen sich nicht laden
 var bild = null, kommt = null, geht = null, ziel = "", folgeKaputt = false;
-var qual = { summe: 0, n: 0, ueberspringen: 90, ab: 0, langsam: 0 };
+var qual = { summe: 0, n: 0, liste: [], ueberspringen: 60, ab: 0, langsam: 0 };
 var standbildModus = false;
 
 function setze(el, name, wert) {
@@ -233,7 +261,7 @@ var gleit = { aktiv: false, ziel: 0, ist: 0 };
 
 function radErlaubt(e) {
   // gedämpft: das Mausrad scrollt wie überall, ohne Nachgleiten
-  if (!an || gedaempft() || e.ctrlKey || e.metaKey || e.defaultPrevented) { return false; }
+  if (!an || !weichesRad || gedaempft() || e.ctrlKey || e.metaKey || e.defaultPrevented) { return false; }
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { return false; }
   // eigene Bildlaufbereiche (z. B. ausgeklappte Inhalte) behalten ihr normales Verhalten
   var el = e.target;
@@ -265,9 +293,27 @@ function gleiten(dt) {
 
 /* ------------------------------------------------------- Schleife, Ereignisse */
 
+// Im Stand (nicht gescrollt) braucht die ruhige Eigenbewegung des 3D-Bildes (Kamera, Staub, Roboter) nur die
+// halbe Bildrate: das halbiert die Arbeit der Dauerschleife auf schwachen Geräten und Laptops (Wärme, Lüfter,
+// Akku) und lässt dem Rest der Seite Luft für die ersten Bilder beim Weiterscrollen. Sobald gescrollt wird,
+// läuft wieder jedes Bild.
+var IM_STAND_MS = 30, STAND_NACH_MS = 400;
+var letzteZeichnung = 0, imStandVorher = false;
+function imStand() {
+  if (!bild || !bild.dauerlauf || geht || gleit.aktiv || gedaempft() || ruhe() < STAND_NACH_MS) { return false; }
+  return Math.abs(klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE) - sGl) < 0.0005;
+}
+
 function schleife(jetzt) {
   raf = 0;
   if (!an || document.hidden || standbildModus) { return; }
+  var stand = sichtbar && imStand();
+  if (stand && jetzt - letzteZeichnung < IM_STAND_MS - 2) {
+    // dieses Bild auslassen; die Zeit läuft weiter (letzte bleibt stehen, dt im nächsten gezeichneten Bild stimmt)
+    raf = window.requestAnimationFrame(schleife);
+    return;
+  }
+  letzteZeichnung = jetzt;
   var dt = klemme((jetzt - letzte) / 1000, 0, 0.05), roh = (jetzt - letzte) / 1000;
   letzte = jetzt;
   gleiten(dt);
@@ -284,7 +330,9 @@ function schleife(jetzt) {
     zeit = sGl * ZEIT_JE_HOEHE + leerlauf;
     if (bild) {
       zeichneBild();
-      if (bild && bild.wachsam) { qualitaet(jetzt, roh); }
+      // gemessen wird nur beim Scrollen und im ersten Bild danach nicht (die halbe Bildrate im Stand ist Absicht)
+      if (bild && bild.wachsam && !stand && !imStandVorher) { qualitaet(jetzt, roh); }
+      imStandVorher = stand;
     } else {
       zeichneVorlauf();
     }
@@ -307,31 +355,40 @@ function zeichneVorlauf() {
   }
 }
 
-// Qualität an das Gerät anpassen (nur beim 3D-Bild). Gemessen wird die mittlere Bilddauer über Zeitfenster
-// von etwa 2,5 Sekunden (mindestens 20 Bilder, spätestens nach 5 Sekunden): über 1/40 s (unter etwa 40
-// Bildern pro Sekunde) geht es eine Stufe leichter, bis zur leichten Stufe 0. Übernehmen soll die
-// vorberechnete Bildfolge, wo sie besser ist (flüssiger und, auf Stufe 3 gerendert, auch schärfer): wenn zwei
-// Fenster hintereinander unter etwa 20 Bildern pro Sekunde liegen (auf jeder Stufe), auf Stufe 0 schon unter
-// etwa 30. Ein Bild zählt höchstens 0,5 s: ein einzelner Hänger zählt nicht als langsam. Gedämpft läuft die
-// Schleife nur beim Scrollen; gemessen wird dann nur das (ein neuer Anlauf setzt die Zeit zurück, siehe
-// starten).
+// Qualität an das Gerät anpassen (nur beim 3D-Bild; gemessen wird nur beim Scrollen, siehe schleife). Gemessen
+// wird die mittlere Bilddauer über Zeitfenster von etwa 1,5 Sekunden (mindestens 20 Bilder, spätestens nach
+// 4 Sekunden), ohne die langsamsten 8 % der Bilder (ein einzelner Hänger, etwa durch die Speicherbereinigung,
+// zählt nicht als langsam). Über 1/45 s (unter etwa 45 Bildern pro Sekunde) geht es eine Stufe leichter, bis
+// zur leichten Stufe 0; ist ein Fenster schon unter etwa 15 Bildern pro Sekunde, gleich auf Stufe 0. Übernehmen
+// soll die vorberechnete Bildfolge, wo sie besser ist (flüssiger und, auf Stufe 3 gerendert, auch schärfer):
+// bei unter etwa 15 Bildern pro Sekunde sofort (auf Stufe 0 schon unter etwa 25), sonst wenn zwei Fenster
+// hintereinander unter etwa 22 Bildern pro Sekunde liegen (auf Stufe 0 unter etwa 30). Je schneller das
+// geschieht, desto kürzer sieht ein schwaches Gerät ein ruckelndes Bild. Gedämpft läuft die Schleife nur beim
+// Scrollen; gemessen wird dann nur das (ein neuer Anlauf setzt die Zeit zurück, siehe starten).
+var FENSTER_S = 1.5, FENSTER_MIN_BILDER = 20, FENSTER_MAX_S = 4;
 function qualitaet(jetzt, roh) {
   if (kommt && kommt.art === "folge") { return; }   // der Wechsel zur Bildfolge läuft schon
-  // den Anlauf nach dem Start und nach jedem Wechsel nicht mitzählen: 90 bzw. 30 Bilder, auf langsamen
-  // Geräten höchstens 1,5 bzw. 0,5 Sekunden
+  // den Anlauf nach dem Start und nach jedem Wechsel nicht mitzählen: 60 bzw. 20 Bilder, auf langsamen
+  // Geräten höchstens 1 bzw. 0,3 Sekunden
   if (qual.ueberspringen > 0 && jetzt < qual.ab) { qual.ueberspringen--; return; }
-  qual.summe += klemme(roh, 0, 0.5); qual.n++;
-  if (qual.summe < 2.5 || (qual.n < 20 && qual.summe < 5)) { return; }
-  var mittel = qual.summe / qual.n;
-  qual.summe = 0; qual.n = 0;
-  if (mittel > (bild.stufe > 0 ? 1 / 20 : 1 / 30)) {
+  var d = klemme(roh, 0, 0.5);
+  qual.summe += d; qual.n++; qual.liste.push(d);
+  if (qual.summe < FENSTER_S || (qual.n < FENSTER_MIN_BILDER && qual.summe < FENSTER_MAX_S)) { return; }
+  qual.liste.sort(function (a, b) { return a - b; });
+  var behalten = Math.max(1, Math.floor(qual.liste.length * 0.92)), s = 0, i;
+  for (i = 0; i < behalten; i++) { s += qual.liste[i]; }
+  var mittel = s / behalten;
+  qual.summe = 0; qual.n = 0; qual.liste.length = 0;
+  var stufe0 = bild.stufe === 0;
+  if (mittel > (stufe0 ? 1 / 25 : 1 / 15)) { zurFolge("langsam"); return; }
+  if (mittel > (stufe0 ? 1 / 30 : 1 / 22)) {
     if (++qual.langsam >= 2) { zurFolge("langsam"); return; }
   } else {
     qual.langsam = 0;
   }
-  if (bild.stufe > 0 && mittel > 1 / 40) {
-    bild.setzeStufe(bild.stufe - 1); stufeMelden(); messen();
-    qual.ueberspringen = 30; qual.ab = jetzt + 500;
+  if (bild.stufe > 0 && mittel > 1 / 45) {
+    bild.setzeStufe(mittel > 1 / 15 ? 0 : bild.stufe - 1); stufeMelden(); messen();
+    qual.ueberspringen = 20; qual.ab = jetzt + 300;
   }
 }
 
@@ -492,7 +549,7 @@ function vorbereitungLaufen(k) {
   // Wischen soll dabei nicht stocken
   var mitRuhe = k.art === "3d" && !!bild;
   var holen = (mitRuhe && !k.modul ? scrollpause() : Promise.resolve()).then(function () {
-    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=10"));
+    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=10") : import("./folge.js?v=11"));
   });
   holen.then(function (m) {
     k.modul = m;
@@ -598,9 +655,9 @@ function bereitMelden() {
   if (!an || !bild) { return; }
   bereit = true;
   root.classList.add("film-bereit");
-  qual.summe = 0; qual.n = 0; qual.langsam = 0;
-  qual.ueberspringen = 90;
-  qual.ab = window.performance.now() + 1500;
+  qual.summe = 0; qual.n = 0; qual.liste.length = 0; qual.langsam = 0;
+  qual.ueberspringen = 60;
+  qual.ab = window.performance.now() + 1000;
   starten();
 }
 
@@ -644,7 +701,7 @@ function einschalten() {
   an = true;
   themaLesen();
   messen();
-  window.addEventListener("wheel", rad, { passive: false });
+  if (weichesRad) { window.addEventListener("wheel", rad, { passive: false }); }
   kopfPruefen();
   if (bild) { bereitMelden(); } else { starten(); }
   weiterschalten();
@@ -704,6 +761,7 @@ export function start(optionen) {
   if (optionen.erzwungen) { erzwungen = true; }
   reduziertAus = !!optionen.reduziertAus;
   if (optionen.folgeAufTouch !== undefined) { folgeAufTouch = !!optionen.folgeAufTouch; }
+  weichesRad = !!optionen.weichesRad;
   try {
     var vorhanden = document.getElementById("film");
     if (!vorhanden || !vorhanden.querySelector(".buehne")) { root.classList.remove("film-an"); return; }
