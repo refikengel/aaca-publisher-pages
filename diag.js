@@ -57,7 +57,7 @@
     window.requestAnimationFrame(bild);
   }
   window.requestAnimationFrame(bild);
-  window.addEventListener("scroll", function () {
+  (window.seite ? window.seite.ziel() : window).addEventListener("scroll", function () {
     var t = performance.now();
     gescrollt.push(t);
     while (gescrollt.length > 300 || (gescrollt.length && t - gescrollt[0] > 6000)) { gescrollt.shift(); }
@@ -139,7 +139,7 @@
       var b = c.getBoundingClientRect();
       return c.width + "x" + c.height + "@" + Math.round(b.width) + "x" + Math.round(b.height);
     }).join(", ");
-    return "Film: Quelle " + a("data-film-quelle") + " | Stufe " + a("data-film-stufe") + " | Grund " + a("data-film-grund") + " | Rechenfaktor " + a("data-film-faktor") + " | Dekodieren " + a("data-film-dekodieren") +
+    return "Film: Quelle " + a("data-film-quelle") + " | Stufe " + a("data-film-stufe") + " | Ort " + a("data-film-ort") + " | Grund " + a("data-film-grund") + " | Rechenfaktor " + a("data-film-faktor") + " | Dekodieren " + a("data-film-dekodieren") +
       " | an " + root.classList.contains("film-an") + " | bereit " + root.classList.contains("film-bereit") + " | Kanäle-Film " + root.classList.contains("kanalfilm") +
       "\nSchleife im Hero: " + a("data-film-schleife") +
       "\nZeichenflächen: " + zeichen;

@@ -26,6 +26,12 @@
   "use strict";
 
   var root = document.documentElement;
+  // was scrollt: auf Handys und Tablets ein eigener Bereich (body), sonst das Fenster (site.js, window.seite)
+  var seite = window.seite || {
+    ziel: function () { return window; },
+    y: function () { return window.pageYOffset || root.scrollTop || 0; },
+    nach: function (top, art) { window.scrollTo({ top: top, left: 0, behavior: art || "instant" }); }
+  };
   function mq(q) { return window.matchMedia ? window.matchMedia(q) : null; }
   var mqReduce = mq("(prefers-reduced-motion: reduce)");
   var mqForced = mq("(forced-colors: active)");
@@ -42,8 +48,26 @@
   // früh setzen (das Skript steht im Kopf), damit die lange Strecke nicht nachträglich springt
   if (moeglich()) { root.classList.add("kanalfilm"); }
 
-  // Ablauf in Bildschirmhöhen, solange die Bühne steht: Einleitung, je Szene L, am Ende ein kurzes Halten
-  var INTRO = 0.55, L = 0.9, BLENDE = 0.5, AUSKLANG = 0.2;
+  // Ablauf in Bildschirmhöhen, solange die Bühne steht: Einleitung, je Szene L (davon BLENDE für die Kreisblende,
+  // der Rest steht die Szene ganz offen), am Ende ein kurzes Halten. Die Strecke ist kurz genug für einen Daumen,
+  // die Blende lang genug, dass sich eine Szene nicht in einem Ruck öffnet (Refik, 30.10.2026: „der Wechsel passiert
+  // viel zu schnell“; vorher L 0,9 und BLENDE 0,5). Die erste Blende beginnt kurz nachdem die Bühne steht (INTRO
+  // minus BLENDE). Ändert sich INTRO, L, BLENDE oder die Zahl der Szenen, gehört die Vorgabe von --kf-s im Stylesheet
+  // angepasst (laenge() + 1, bei fünf Szenen 7,2), sonst springt die Seite beim Start.
+  var INTRO = 0.75, L = 1.05, BLENDE = 0.7, AUSKLANG = 0.2;
+  // Die Szenen folgen einer geglätteten Scrollstelle: xGl folgt der echten wie eine kritisch gedämpfte Feder (Zeit
+  // GLAETTEN_S, ohne Überschwingen). Ein schneller Wischer auf dem Handy reißt die Kreisblende so nicht in einem Ruck
+  // auf, sie öffnet sich in einer guten Viertelsekunde und kommt weich zur Ruhe. Gedämpft („Bewegung reduzieren“)
+  // kürzer; auch dort folgt alles nur der Scrollstelle, von selbst bewegt sich nichts.
+  var GLAETTEN_S = 0.24, GLAETTEN_GEDAEMPFT_S = 0.12;
+  var xGl = null, xV = 0, letzteZeit = 0;
+  function glaetten(ziel, dt) {
+    var zeit = mqReduce && mqReduce.matches ? GLAETTEN_GEDAEMPFT_S : GLAETTEN_S;
+    var w = 2 / zeit, q = w * dt, e = 1 / (1 + q + 0.48 * q * q + 0.235 * q * q * q);
+    var d = xGl - ziel, schub = (xV + w * d) * dt;
+    xV = (xV - w * schub) * e;
+    xGl = ziel + (d + schub) * e;
+  }
   // die Elemente, deren Aussehen dem Ablauf --t ihrer Szene folgt (im Stylesheet var(--t) und die daraus
   // berechneten Werte): nur sie bekommen --t, nicht die ganze Szene. Wer im Stylesheet var(--t) neu nutzt,
   // gehört in diese Liste.
@@ -54,10 +78,14 @@
   // je Szene die zuletzt gesetzten Werte (gesetzt wird nur, was sich ändert)
   var stand = [], kopfWert = "", ruht = null, stehtAlt = null, wischt = false, wischUhr = 0;
   var N = 0, H = 1, R = 1, an = false, raf = 0, aktiv = -2, letztesX = null, gemessen = false;
+  // Breite des Fensters und Höhe der Bühne beim letzten Messen (siehe das Ereignis resize unten)
+  var gemesseneBreite = -1, gemesseneHoehe = -1;
 
   function klemme(x, a, b) { return x < a ? a : (x > b ? b : x); }
   function weich(x) { x = klemme(x, 0, 1); return x * x * (3 - 2 * x); }
-  function lies() { return window.pageYOffset || root.scrollTop || 0; }
+  // noch weicher an Anfang und Ende (für die Kreisblende): keine Kante beim Anlaufen und beim Ankommen
+  function weicher(x) { x = klemme(x, 0, 1); return x * x * x * (x * (6 * x - 15) + 10); }
+  function lies() { return seite.y(); }
   function anfang(i) { return INTRO + i * L; }               // ab hier ist Szene i ganz offen
   function laenge() { return anfang(N - 1) + L + AUSKLANG; }
 
@@ -93,6 +121,15 @@
     }
     var mitte = hoch ? (oben + unten) / 2 : klemme(H * 0.53, oben + gh / 2, Math.max(oben + gh / 2, unten - gh / 2));
     buehne.style.setProperty("--geraet-y", mitte.toFixed(1) + "px");
+    // Im Hochformat dreht sich das Gerät (YouTube ins Vollbild, Instagram zurück) quer über fast die ganze Breite:
+    // gedreht ist es so breit wie hoch (gh), verkleinert auf 92 % der Bühnenbreite. Vorher fest auf zwei Drittel, am
+    // Handy wirkte es dann winzig zwischen viel leerem Raum.
+    if (hoch) {
+      var breite = b.width || window.innerWidth;
+      buehne.style.setProperty("--quer-skala", Math.max(0, 1 - Math.min(1, breite * 0.92 / gh)).toFixed(3));
+    } else {
+      buehne.style.removeProperty("--quer-skala");
+    }
   }
 
   // Ausgangspunkte der Kreisblenden (Mitte der Symbole) und Länge der Strecke
@@ -101,6 +138,8 @@
     // Höhe der Bühne (100svh), nicht des Fensters: auf Handys ändert sich das Fenster, wenn die Adressleiste
     // ein- und ausfährt, die Strecke aber nicht
     H = Math.max(1, buehne.clientHeight || window.innerHeight);
+    gemesseneBreite = window.innerWidth;
+    gemesseneHoehe = buehne.clientHeight;
     spur.style.setProperty("--kf-s", (laenge() + 1).toFixed(3));
     lageMessen();
     var b = buehne.getBoundingClientRect();
@@ -142,22 +181,29 @@
     if (!an) { return; }
     if (!gemessen) { messen(); }
     // erst lesen, dann schreiben: Lage der Strecke im Dokument (folgt auch Änderungen weiter oben)
-    var x = -spur.getBoundingClientRect().top / H;
+    var xEcht = -spur.getBoundingClientRect().top / H;
     // Bühne außer Sicht: alle Bewegungen in ihr ruhen, sonst nichts zu tun; in Sicht (die Bühne steht)
-    // entfällt „Nach oben“ (Stylesheet, Klasse kanal-sichtbar)
-    var weg = x < -1.2 || x > laenge() + 1.2;
+    // entfällt „Nach oben“ (Stylesheet, Klasse kanal-sichtbar). Das gilt für die echte Scrollstelle.
+    var weg = xEcht < -1.2 || xEcht > laenge() + 1.2;
     if (weg !== ruht) { ruht = weg; buehne.classList.toggle("ruht", weg); }
-    var steht = x > -0.05 && x < laenge() + 0.05;
+    var steht = xEcht > -0.05 && xEcht < laenge() + 0.05;
     if (steht !== stehtAlt) { stehtAlt = steht; root.classList.toggle("kanal-sichtbar", steht); }
-    if (weg) { return; }
+    if (weg) { xGl = null; return; }
+    // die Szenen folgen der geglätteten Stelle; beim Hereinkommen und bei Sprüngen (Symbole oben, Links: mehr als
+    // drei Bildschirmhöhen) sofort an der richtigen Stelle
+    var jetzt = window.performance.now(), dt = letzteZeit ? klemme((jetzt - letzteZeit) / 1000, 0, 0.05) : 0;
+    letzteZeit = jetzt;
+    if (xGl === null || Math.abs(xEcht - xGl) > 3) { xGl = xEcht; xV = 0; } else { glaetten(xEcht, dt); }
+    if (Math.abs(xEcht - xGl) < 0.0004 && Math.abs(xV) < 0.002) { xGl = xEcht; xV = 0; } else { planen(); }
+    var x = xGl;
     if (letztesX !== null && Math.abs(x - letztesX) < 0.0004) { return; }
     letztesX = x;
     var neuAktiv = -1;
     for (var i = 0; i < N; i++) {
       var e = eintraege[i], z = stand[i], a = anfang(i);
-      var w = weich((x - (a - BLENDE)) / BLENDE);
+      var w = weicher((x - (a - BLENDE)) / BLENDE);
       var t = klemme((x - (a - BLENDE)) / (L + BLENDE), 0, 1);
-      var weiter = i + 1 < N ? weich((x - (anfang(i + 1) - BLENDE)) / BLENDE) : 0;
+      var weiter = i + 1 < N ? weicher((x - (anfang(i + 1) - BLENDE)) / BLENDE) : 0;
       var bedeckt = weiter >= 1;
       // eine verdeckte Szene muss nicht nachgeführt werden (sie bekommt ihren Wert, sobald sie wieder sichtbar wird)
       if (!bedeckt) { ablaufSetzen(i, z, t); }
@@ -197,7 +243,7 @@
   // zu Szene i springen (sofort, wie die übrigen Sprungmarken der Seite)
   function springe(i) {
     var top = spur.getBoundingClientRect().top + lies();
-    window.scrollTo({ top: Math.round(top + (anfang(i) + 0.12) * H), left: 0, behavior: "instant" });
+    seite.nach(Math.round(top + (anfang(i) + 0.12) * H));
   }
 
   function einschalten() {
@@ -247,7 +293,7 @@
     kopfTeile.forEach(function (k) { k.style.removeProperty("--kopf"); });
     knoepfe.forEach(function (k) { k.removeAttribute("aria-current"); });
     if (buehne) {
-      ["--kopfzeile", "--gh", "--geraet-y"].forEach(function (n) { buehne.style.removeProperty(n); });
+      ["--kopfzeile", "--gh", "--geraet-y", "--quer-skala"].forEach(function (n) { buehne.style.removeProperty(n); });
       buehne.removeAttribute("data-aktiv");
       buehne.classList.remove("ruht", "wischt");
     }
@@ -271,8 +317,16 @@
 
   bereit(function () {
     steuern();
-    window.addEventListener("scroll", function () { planen(); wischen(); }, { passive: true });
-    window.addEventListener("resize", function () { if (an) { gemessen = false; planen(); } });
+    seite.ziel().addEventListener("scroll", function () { planen(); wischen(); }, { passive: true });
+    // Neu gemessen wird nur, wenn sich die Breite des Fensters oder die Höhe der Bühne ändert. Die Adressleiste am
+    // Handy ändert beim Ein- und Ausfahren nur die Höhe des Fensters; die Bühne rechnet in lvh und bleibt gleich.
+    // Vorher wurde die ganze Bühne bei jedem Erscheinen der Leiste neu vermessen, auch mitten im Hauptfilm: ein
+    // Hänger genau dann, wenn man wieder hochscrollt (dann fährt die Leiste ein).
+    window.addEventListener("resize", function () {
+      if (!an || (window.innerWidth === gemesseneBreite && buehne && buehne.clientHeight === gemesseneHoehe)) { return; }
+      gemessen = false;
+      planen();
+    });
     window.addEventListener("load", function () { if (an) { gemessen = false; planen(); } });
     document.addEventListener("bewegung", steuern);
     document.addEventListener("film-erzwungen", steuern);

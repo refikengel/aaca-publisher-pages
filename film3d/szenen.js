@@ -5,10 +5,10 @@
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoundedBoxGeometry } from "../vendor/three/addons/geometries/RoundedBoxGeometry.js";
-import { stoff, malTextur, holzTextur, zufall } from "./stoff.js";
+import { stoff, malTextur, holzTextur, zufall } from "./stoff.js?v=18";
 import { klemme, seg, weich, weicher, mische, huegel, anschlag, bahn } from "./helfer.js";
-import { farbeVon } from "./maschine.js";
-import { namen, SCHRIFT } from "./sprache.js";
+import { farbeVon } from "./maschine.js?v=18";
+import { namen, SCHRIFT } from "./sprache.js?v=18";
 
 const V = () => new THREE.Vector3();
 export { netz, bei, gedreht, rohr };

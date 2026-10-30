@@ -84,7 +84,7 @@
     root.classList.add("film-an");
     knopfAnpassen();
     try {
-      import("./film3d/haupt.js?v=14").then(function (m) {
+      import("./film3d/haupt.js?v=18").then(function (m) {
         modul = m;
         m.start({ erzwungen: erzwungen, reduziertAus: reduziertAus, folgeAufTouch: BILDFOLGE_AUF_TOUCH, weichesRad: WEICHES_SCROLLEN });
       }, function () { geladen = false; ausGrund = "fehler"; zurueck(); knopfAnpassen(); });
@@ -144,7 +144,7 @@
   if (/[?&]diag(?:=|&|#|$)/.test(window.location.search)) {
     var diagLaden = function () {
       var s = document.createElement("script");
-      s.src = "diag.js?v=14";
+      s.src = "diag.js?v=18";
       document.head.appendChild(s);
     };
     if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", diagLaden); } else { diagLaden(); }

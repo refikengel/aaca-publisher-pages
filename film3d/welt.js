@@ -15,6 +15,7 @@ import { RenderPass } from "../vendor/three/addons/postprocessing/RenderPass.js"
 import { ShaderPass } from "../vendor/three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "../vendor/three/addons/postprocessing/OutputPass.js";
 import { UnrealBloomPass } from "../vendor/three/addons/postprocessing/UnrealBloomPass.js";
+import { leinwand } from "./stoff.js?v=18";
 
 // günstige Kantenglättung für Stufe 0 nach dem Prinzip von FXAA (NVIDIA): Helligkeit an vier diagonalen
 // Nachbarn, daraus die Kantenrichtung, entlang der Kante zweimal nachtasten; ohne Schleifen (keine
@@ -75,6 +76,11 @@ export class Welt {
       powerPreference: "high-performance", failIfMajorPerformanceCaveat: !softwareErlaubt
     });
     if (!r.capabilities.isWebGL2) { throw new Error("kein WebGL2"); }
+    // three.js prüft sonst jedes Shaderprogramm beim ersten Gebrauch auf Fehler und wartet dafür im Hauptthread,
+    // bis der Treiber es fertig übersetzt hat (am ersten Bild der Vorbereitung gemessen: ein Viertel der Zeit);
+    // ohne die Prüfung übersetzt der Grafikprozess nebenher. Die Shader sind die von three.js r170 und wenige
+    // eigene, auf Rechner- und Handygrafik geprüft; ein Ausfall zeigt sich als Kontextverlust oder zu langsames Bild.
+    r.debug.checkShaderErrors = false;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.0;
@@ -126,8 +132,11 @@ export class Welt {
   // sondern in zwei Schritten der Vorbereitung. umgebungVorbereiten() lässt die Shader des Raums und des
   // Weichzeichners nebenher übersetzen (Promise: fertig), umgebungBauen() rendert dann ohne Warten. Der
   // Weichzeichner wird über interne Methoden von three.js r170 vorbereitet; geht das nicht, übersetzt
-  // umgebungBauen ihn eben selbst (dauert nur länger).
+  // umgebungBauen ihn eben selbst (dauert nur länger). Raum und Weichzeichner haben keine Schnittebenen: übersetzt
+  // wird darum nach der Probe ohne Ebenen (schnittebenen); bis Fassung 17 galt hier noch der Zustand der Probe mit
+  // zwei Ebenen, und umgebungBauen übersetzte alles noch einmal, blockierend.
   umgebungVorbereiten() {
+    this.schnittebenen(0);
     var r = this.renderer, ziel = r.getRenderTarget(), stoffe = new Set();
     var pm = this.pm = new THREE.PMREMGenerator(r);
     var raum = this.raum = new RoomEnvironment();
@@ -157,9 +166,10 @@ export class Welt {
   }
 
   hintergrund() {
-    var n = 512, c = document.createElement("canvas");
-    c.width = c.height = n;
-    var ctx = c.getContext("2d");
+    var n = 512, c = leinwand(n, n);
+    // die Pixel werden gleich wieder gelesen (Rauschen): eine Leinwand im Arbeitsspeicher spart das Zurückholen von
+    // der Grafikkarte (am Rechner gemessen gut 50 ms für dieses eine Bild)
+    var ctx = c.getContext("2d", { willReadFrequently: true });
     var g = ctx.createRadialGradient(n * 0.5, n * 0.42, 0, n * 0.5, n * 0.5, n * 0.72);
     g.addColorStop(0, "#17223f");
     g.addColorStop(0.45, "#0d1529");
@@ -220,8 +230,7 @@ export class Welt {
 
   // weiche Kontaktschatten (dunkler Kreisverlauf) für Dinge, die auf der Bühne stehen oder schweben
   schattenBauen() {
-    var n = 256, c = document.createElement("canvas");
-    c.width = c.height = n;
+    var n = 256, c = leinwand(n, n);
     var ctx = c.getContext("2d");
     var g = ctx.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
     g.addColorStop(0, "rgba(0,0,0,0.85)");
@@ -293,6 +302,62 @@ export class Welt {
     }
   }
 
+  // Die Stoffe der Nachbearbeitung (Leuchten, Ausgabe, Korn bzw. Kantenglättung) nebenher übersetzen lassen; sonst
+  // übersetzt das erste Bild sie blockierend (am Rechner rund 50 ms, am Handy ein Mehrfaches). Jeder Stoff mit dem
+  // Ziel, in das er später zeichnet: der letzte Durchgang auf den Bildschirm (dort mit Tonwerten), die übrigen in ein
+  // Renderziel. Die Ausgabe (OutputPass) setzt ihre Defines erst beim ersten Zeichnen; das geschieht hier vorab, wie
+  // in three.js r170 (sonst übersetzt sie beim ersten Bild noch einmal). Liefert je Stoff einen Auftrag (Funktion, die
+  // ihn übersetzt und zurückgibt): bild3d.js stößt sie einzeln an, damit der Grafikprozess nicht neun Programme auf
+  // einmal verknüpft (siehe vorbereiten dort). Jeder nach der Probe ohne Schnittebenen wie bei der Umgebung (bis
+  // Fassung 17 galt hier der Zustand mit zwei Ebenen: dann übersetzte das erste Bild alle neun Stoffe noch einmal,
+  // blockierend).
+  nachbearbeitungAuftraege() {
+    var welt = this, r = this.renderer, gesehen = new Set(), auftraege = [];
+    var flaeche = new THREE.PlaneGeometry(2, 2), kamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    function dazu(m, zumSchirm) {
+      if (!m || !m.isMaterial || gesehen.has(m)) { return; }
+      gesehen.add(m);
+      var q = new THREE.Mesh(flaeche, m);
+      q.frustumCulled = false;
+      auftraege.push(function () {
+        var ziel = r.getRenderTarget();
+        welt.schnittebenen(0);
+        try {
+          r.setRenderTarget(zumSchirm ? null : welt.composer.readBuffer);
+          r.compile(q, kamera);
+        } catch (fehler) {
+          // andere three.js-Fassung: dann übersetzt das erste Bild ihn eben selbst
+        } finally {
+          r.setRenderTarget(ziel);
+        }
+        return m;
+      });
+    }
+    try {
+      // auf den Bildschirm zeichnet der letzte eingeschaltete Durchgang (EffectComposer setzt renderToScreen erst
+      // beim Zeichnen)
+      var an = this.composer.passes.filter(function (p) { return p.enabled; }), letzter = an[an.length - 1];
+      an.forEach(function (p) {
+        if (p.material && p.material.name === "OutputShader") {
+          var d = p.material.defines = {};
+          if (THREE.ColorManagement.getTransfer(r.outputColorSpace) === THREE.SRGBTransfer) { d.SRGB_TRANSFER = ""; }
+          if (r.toneMapping === THREE.ACESFilmicToneMapping) { d.ACES_FILMIC_TONE_MAPPING = ""; }
+          p._outputColorSpace = r.outputColorSpace;
+          p._toneMapping = r.toneMapping;
+          p.material.needsUpdate = true;
+        }
+        dazu(p.material, p === letzter);
+        dazu(p.materialHighPassFilter, false);
+        (p.separableBlurMaterials || []).forEach(function (m) { dazu(m, false); });
+        dazu(p.compositeMaterial, false);
+        dazu(p.blendMaterial, false);
+      });
+    } catch (fehler) {
+      // andere three.js-Fassung: dann übersetzt das erste Bild sie eben selbst
+    }
+    return auftraege;
+  }
+
   // die Stoffe eines Objekts (ohne Kinder) übersetzen; liefert die Menge der Stoffe (für warten)
   uebersetzen(objekt) {
     var r = this.renderer, ziel = r.getRenderTarget(), kinder = objekt.children;
@@ -304,6 +369,85 @@ export class Welt {
       objekt.children = kinder;
       r.setRenderTarget(ziel);
     }
+  }
+
+  // Den Tiefen-Stoff übersetzen, mit dem three.js (r170, WebGLShadowMap) das Objekt in die Schattenkarte zeichnet:
+  // Tiefe in RGBA, die Seite gespiegelt (sofern der Stoff keine eigene Schattenseite hat), Karte, Alpha-Test und
+  // Schnittebenen vom Stoff des Objekts. Gleiche Einstellungen ergeben dasselbe Programm, die Schattenkarte findet es
+  // dann fertig vor. Übersetzt wird mit einem Stellvertreter derselben Art (Instanzen, Linie, Punkte) und derselben
+  // Geometrie, wie bei uebersetzen in ein Renderziel, mit den Lichtern der Welt, aber ohne ihren Nebel: three.js
+  // zeichnet die Schattenkarte mit einer leeren Szene, und der Nebel der Szene gehört zum Programm. Liefert die Menge
+  // der Stoffe (für warten); die Stoffe werden nach dem Vorwärmen freigegeben (schattenStoffeFreigeben), die
+  // Programme bleiben, solange three.js sie braucht.
+  schattenUebersetzen(objekt) {
+    var m = objekt.material, t = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), o;
+    var gespiegelt = {};
+    gespiegelt[THREE.FrontSide] = THREE.BackSide;
+    gespiegelt[THREE.BackSide] = THREE.FrontSide;
+    gespiegelt[THREE.DoubleSide] = THREE.DoubleSide;
+    t.visible = m.visible;
+    t.wireframe = m.wireframe;
+    t.side = m.shadowSide !== null ? m.shadowSide : gespiegelt[m.side];
+    t.alphaMap = m.alphaMap; t.alphaTest = m.alphaTest; t.map = m.map;
+    t.clipShadows = m.clipShadows; t.clippingPlanes = m.clippingPlanes; t.clipIntersection = m.clipIntersection;
+    t.displacementMap = m.displacementMap; t.displacementScale = m.displacementScale; t.displacementBias = m.displacementBias;
+    if (objekt.isInstancedMesh) {
+      o = new THREE.InstancedMesh(objekt.geometry, t, objekt.count);
+      o.instanceColor = objekt.instanceColor;
+      o.morphTexture = objekt.morphTexture;
+    } else if (objekt.isLine) {
+      o = new THREE.Line(objekt.geometry, t);
+    } else if (objekt.isPoints) {
+      o = new THREE.Points(objekt.geometry, t);
+    } else {
+      o = new THREE.Mesh(objekt.geometry, t);
+    }
+    (this.schattenStoffe = this.schattenStoffe || []).push(t);
+    var r = this.renderer, ziel = r.getRenderTarget(), nebel = this.szene.fog;
+    try {
+      r.setRenderTarget(this.composer.readBuffer);
+      this.szene.fog = null;
+      return r.compile(o, this.kamera, this.szene);
+    } finally {
+      this.szene.fog = nebel;
+      r.setRenderTarget(ziel);
+    }
+  }
+
+  schattenStoffeFreigeben() {
+    (this.schattenStoffe || []).forEach(function (t) { t.dispose(); });
+    this.schattenStoffe = [];
+  }
+
+  // ein Bild der Welt ohne ihre Dinge (nur Licht, Hintergrund und Nachbearbeitung) auf die noch unsichtbare Leinwand:
+  // legt die Renderziele an und übersetzt den Hintergrund (siehe Vorbereitung in bild3d.js)
+  leerbild() {
+    var aus = [];
+    this.szene.children.forEach(function (o) {
+      if (o.visible && (o.isMesh || o.isPoints || o.isLine || o.isSprite || o.isGroup)) { o.visible = false; aus.push(o); }
+    });
+    try {
+      this.render(0);
+    } finally {
+      aus.forEach(function (o) { o.visible = true; });
+    }
+  }
+
+  // erfüllt, sobald die Grafikkarte alles bisher Aufgetragene erledigt hat (WebGL-Zaun): so gibt die Vorbereitung dem
+  // Grafikprozess nie mehrere schwere Aufträge auf einmal (siehe vorbereiten in bild3d.js)
+  abgearbeitet() {
+    var gl = this.renderer.getContext(), zaun = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    return new Promise(function (fertig) {
+      (function pruefen() {
+        if (!zaun || gl.isContextLost() || gl.getSyncParameter(zaun, gl.SYNC_STATUS) === gl.SIGNALED) {
+          if (zaun && !gl.isContextLost()) { gl.deleteSync(zaun); }
+          fertig();
+        } else {
+          setTimeout(pruefen, 4);
+        }
+      })();
+    });
   }
 
   // erfüllt, wenn die Shader aller stoffe fertig sind; ohne behalten wird danach auch die Probe freigegeben
@@ -320,7 +464,7 @@ export class Welt {
           var p = eig.get(m).currentProgram;
           if (p && !p.isReady()) { offen = true; }
         });
-        if (offen) { window.setTimeout(pruefen, 16); } else { fertig(); }
+        if (offen) { setTimeout(pruefen, 16); } else { fertig(); }
       })();
     });
   }
@@ -354,6 +498,23 @@ export class Welt {
       // nur echtes Leuchten (Augen, Heiligenschein, Scanstrahl) glüht, helle Flächen nicht
       // dezent: geringe Stärke, enger Radius, hohe Schwelle (das Glühen soll keine Details überstrahlen)
       var bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.18, 0.22, 1.6);
+      // sparsames Bild (render, leicht): nur das Leuchten des vorigen Bildes auflegen (es steht nach jedem vollen
+      // Durchgang in renderTargetsHorizontal[0]), ohne Hellfilter, Unschärfen und Zusammensetzen (12 von 13 Durchgängen)
+      var welt = this, ganz = bloom.render;
+      bloom.render = function (renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+        if (welt.sparen && this.hatLeuchten) {
+          var autoClear = renderer.autoClear;
+          renderer.autoClear = false;
+          this.fsQuad.material = this.blendMaterial;
+          this.copyUniforms.tDiffuse.value = this.renderTargetsHorizontal[0].texture;
+          renderer.setRenderTarget(this.renderToScreen ? null : readBuffer);
+          this.fsQuad.render(renderer);
+          renderer.autoClear = autoClear;
+          return;
+        }
+        ganz.call(this, renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+        this.hatLeuchten = true;
+      };
       c.addPass(bloom);
     }
     c.addPass(new OutputPass());
@@ -388,7 +549,19 @@ export class Welt {
     this.staubStoff.uniforms.uPixel.value = d * css / 600;
   }
 
-  render(zeit) {
+  // leicht (beim Wischen auf Touch-Geräten, haupt.js): jedes zweite Bild ohne neue Schattenkarte und ohne neues
+  // Leuchten; beide kommen dann aus dem Bild davor. Am Handy ist beim Wischen der Grafikprozess der Engpass (er zeichnet
+  // auch die Seite), und so sinkt seine Arbeit für das 3D-Bild, ohne dass sich das Bild sichtbar ändert: Schatten und
+  // Leuchten hinken höchstens ein Bild hinterher. Im Stand und für die Bildfolge (standbild) ist jedes Bild vollständig.
+  render(zeit, leicht) {
+    this.bildNr = (this.bildNr || 0) + 1;
+    var sparen = !!leicht && (this.bildNr & 1) === 1;
+    this.sparen = sparen;
+    var h = this.hauptLicht;
+    if (this.stufe > 0 && this.mitSchatten) {
+      h.shadow.autoUpdate = false;
+      h.shadow.needsUpdate = !sparen || !h.shadow.map;
+    }
     this.staubStoff.uniforms.uZeit.value = zeit;
     if (this.korn) { this.korn.uniforms.uZeit.value = zeit; }
     this.composer.render();

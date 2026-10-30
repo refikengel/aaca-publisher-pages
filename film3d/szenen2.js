@@ -3,10 +3,10 @@
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoundedBoxGeometry } from "../vendor/three/addons/geometries/RoundedBoxGeometry.js";
-import { stoff, malTextur, holzTextur, zufall } from "./stoff.js";
+import { stoff, malTextur, holzTextur, zufall } from "./stoff.js?v=18";
 import { klemme, seg, weich, weicher, mische, huegel, anschlag, bahn } from "./helfer.js";
-import { netz, bei, gedreht, rohr } from "./szenen.js";
-import { farbeVon, FARBEN as FARBE6 } from "./maschine.js";
+import { netz, bei, gedreht, rohr } from "./szenen.js?v=18";
+import { farbeVon, FARBEN as FARBE6 } from "./maschine.js?v=18";
 
 const V = () => new THREE.Vector3();
 

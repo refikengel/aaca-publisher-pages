@@ -1,6 +1,7 @@
 /*
   Sprache und Schrift des Films: Beschriftungen folgen dem Sprachschalter der Seite
-  (html[data-sprache], gesetzt von site.js). Ohne Angabe gilt Deutsch.
+  (html[data-sprache], gesetzt von site.js). Ohne Angabe gilt Deutsch. Im Worker des 3D-Bildes (bild3d-worker.js)
+  gibt es kein document: dort gilt die Sprache, die ihm die Seite schickt (spracheSetzen).
 */
 export const NAMEN = {
   de: ["IT-ENGEL", "THEMA", "SKRIPT", "STIMME", "QUELLEN", "FREIGABE", "KANÄLE", "ZIEL"],
@@ -15,8 +16,11 @@ export const SCHRIFT = '"Raleway", system-ui, sans-serif';
 // Nummern auf den Leinwänden deshalb in einer Systemschrift mit Versalziffern
 export const ZIFFERN = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
 
+var gesetzt = "";
+export function spracheSetzen(s) { gesetzt = s || ""; }
+
 export function sprache() {
-  var s = document.documentElement.getAttribute("data-sprache");
+  var s = typeof document !== "undefined" ? document.documentElement.getAttribute("data-sprache") : gesetzt;
   return s === "en" || s === "neutral" ? s : "de";
 }
 

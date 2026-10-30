@@ -128,6 +128,40 @@ body {
 
 main { flex: 1 0 auto; }
 
+/* Der Inhalt jeder Seite (Kopfzeile, Hauptteil, Fußzeile) steht in einem Rahmen (.bereich). Am Rechner ordnet er nur
+   (Fußzeile unten auf kurzen Seiten). Auf Handys und Tablets ist er der eigene Scrollbereich (Klasse eigen-scroll von
+   site.js, nur mit Skript): Die Seite scrollt in ihm, das Fenster selbst nicht. So klappt der Browser seine Leisten
+   beim Wischen nicht auf und zu, und das Fenster behält seine Größe (siehe site.js). Der Rahmen endet einen Pixel über
+   dem unteren Rand: Einen Bereich in genau Fenstergröße behandelt Chrome wie das Fenster selbst, dann klappten die
+   Leisten wieder (am Handy in Chrome, Brave und DuckDuckGo gemessen; mit dem body als Bereich klappte die Leiste in
+   DuckDuckGo). Kein Nachziehen über den Rand hinaus und kein „Ziehen zum Aktualisieren“, wie in einer App. */
+.bereich { display: flex; flex: 1 0 auto; flex-direction: column; min-width: 0; }
+html.eigen-scroll, html.eigen-scroll body { height: 100%; overflow: hidden; }
+/* Kopfzeile wie die Leiste einer App: deckend (sonst schien der Text darunter durch, am Handy deutlich zu sehen) */
+html.eigen-scroll { scroll-padding-top: 0; --header-bg: var(--bg); }
+html.eigen-scroll body { min-height: 0; }
+html.eigen-scroll .bereich {
+  position: fixed;
+  inset: 0 0 1px 0;
+  overflow: hidden auto;
+  overscroll-behavior: none;
+  scroll-padding-top: 5rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.eigen-scroll { scroll-behavior: auto; }
+  html.eigen-scroll .bereich { scroll-behavior: smooth; }
+}
+/* Drucken (auch vom Handy): die ganze Seite, nicht nur der sichtbare Ausschnitt des Rahmens */
+@media print {
+  html.eigen-scroll, html.eigen-scroll body { height: auto; overflow: visible; }
+  html.eigen-scroll .bereich { position: static; overflow: visible; }
+}
+/* Wie eine App: kein grauer Blitz beim Antippen (Rückmeldung geben die Elemente selbst), kein Doppeltipp-Zoom auf
+   Bedienelementen, und langes Drücken markiert keine Wörter der Bedienung (Texte bleiben markierbar). */
+html { -webkit-tap-highlight-color: transparent; }
+a, button, summary { touch-action: manipulation; }
+.site-header, .kanal-wahl, .nach-oben, .pause, .film-start { -webkit-user-select: none; user-select: none; }
+
 [hidden] { display: none !important; }
 
 /* Textauswahl in Gold (wie --gold-fill und --on-gold), mit festen Farben statt var(): mit Variablen rechnet der
@@ -605,10 +639,13 @@ html:not([data-sprache]) .hero-lead[lang="en"] { color: var(--ink-muted); font-s
 @property --gefaellt { syntax: "<number>"; inherits: false; initial-value: 0; }
 @property --merken { syntax: "<number>"; inherits: false; initial-value: 0; }
 
+/* Die Vorgaben der Strecken (--film-s, --kf-s) sind genau die Werte, die haupt.js (ENDE + 1 aus fahrplan.js) und
+   kanaele.js (laenge() + 1) später setzen: Weichen sie ab, wächst oder schrumpft die Seite beim Start um Tausende
+   Pixel, und wer neu lädt oder zurückkommt, landet an einer anderen Stelle (vorher 9,4 statt 13,8 und 6,4 statt 6,25). */
 html.film-an .film {
   position: relative;
-  height: calc(var(--film-s, 9.4) * 100vh);
-  height: calc(var(--film-s, 9.4) * 100svh);
+  height: calc(var(--film-s, 13.8) * 100vh);
+  height: calc(var(--film-s, 13.8) * 100svh);
 }
 html.film-an .buehne {
   position: sticky;
@@ -624,6 +661,18 @@ html.film-an .buehne {
   --kante: max(var(--rand), calc((100vw - 80rem) / 2 + var(--rand)));
 }
 html.film-an .site-header { position: fixed; top: 0; left: 0; right: 0; }
+/* Im eigenen Scrollbereich (site.js) klebt die Kopfzeile über dem Film oben (sticky) und gibt ihren Platz mit einem
+   negativen Rand ab: So liegt sie wie eine feste Kopfzeile über dem Film. Fest (fixed) ginge hier nicht: Ein Wischer,
+   der auf einem festen Element beginnt, scrollt das Fenster statt des eigenen Bereichs, und das Fenster scrollt nicht
+   (am Handy gemessen: auf der Kopfzeile angesetzt, bewegte sich die Seite nicht). --kopf-ist ist ihre Höhe (site.js). */
+html.eigen-scroll.film-an .site-header { position: sticky; margin-bottom: calc(-1 * var(--kopf-ist, 6.3rem + 1px)); }
+/* bis site.js misst: dieselbe Höhe aus Logo, Innenabstand und Linie (Querformat: --kopf-h), damit nichts springt */
+@media (max-width: 30em) {
+  html.eigen-scroll.film-an .site-header { margin-bottom: calc(-1 * var(--kopf-ist, 5.3rem + 1px)); }
+}
+@media (min-aspect-ratio: 11/10) and (max-height: 36rem) {
+  html.eigen-scroll.film-an .site-header { margin-bottom: calc(-1 * var(--kopf-ist, var(--kopf-h) + 1px)); }
+}
 /* solange die Fahrt unter der Kopfzeile läuft, bleibt sie durchsichtig; danach wird sie wie auf den anderen Seiten fest */
 html.film-an:not(.film-ende) .site-header.is-scrolled { background: transparent; border-bottom-color: transparent; }
 /* solange die Fahrt oder der Kanäle-Film läuft, ist „Nach oben“ überflüssig (es läge auf den Texten) */
@@ -1194,8 +1243,8 @@ html:not([data-sprache]) .station-text p[lang="en"] { color: var(--ink-muted); f
 html.kanalfilm .kanaele-abschnitt { padding-block: 0; border-top: 0; }
 html.kanalfilm .kanalfilm {
   position: relative;
-  height: calc(var(--kf-s, 6.4) * 100vh);
-  height: calc(var(--kf-s, 6.4) * 100svh);
+  height: calc(var(--kf-s, 7.2) * 100vh);
+  height: calc(var(--kf-s, 7.2) * 100svh);
 }
 html.kanalfilm .kanal-buehne {
   position: sticky;
@@ -1245,8 +1294,7 @@ html.kanalfilm .kanal-eintrag:nth-child(5) { z-index: 5; }
 html.kanalfilm .kanal-eintrag.voll { clip-path: none; }
 html.kanalfilm .kanal-eintrag.bedeckt { background: none; }
 html.kanalfilm .kanal-eintrag.zu .kanal-szene,
-html.kanalfilm .kanal-eintrag.bedeckt .kanal-szene { visibility: hidden; }
-/* Die Dauerbewegungen der Szenen (Goldstaub, Platte, Herzen, Schweben) ruhen, solange ihre Szene zu oder verdeckt
+html.kanalfilm .kanal-eintrag.bedeckt .kanal-szene { visibility: hidden; }/* Die Dauerbewegungen der Szenen (Goldstaub, Platte, Herzen, Schweben) ruhen, solange ihre Szene zu oder verdeckt
    ist, die Bühne außer Sicht steht oder gerade gescrollt wird (kanaele.js: Klassen zu, bedeckt, ruht, wischt).
    Gezielt diese Elemente: mit * rechnete der Browser bei jedem Wechsel der Klasse die ganze Szene neu. */
 html.kanalfilm .kanal-eintrag.zu .staub,
@@ -1876,7 +1924,9 @@ html.kanalfilm .kanal-hinweis {
   max-width: 34rem;
   margin: 0;
   font-size: .78rem;
-  opacity: calc((1 - var(--kopf, 0)) * .85);
+  /* schneller weg als der Kopf: im Hochformat steht er dort, wo gleich der Name der ersten Szene erscheint (am Handy
+     lagen beide kurz übereinander) */
+  opacity: calc(max(0, 1 - var(--kopf, 0) * 1.8) * .85);
 }
 
 /* Hochformat (Handy): Gerät oben, Text darunter, Auswahl mittig unter der Kopfzeile */
@@ -1925,13 +1975,13 @@ html.kanalfilm .kanal-hinweis {
    bleibt so immer sichtbar. Die Scroll-Strecke rechnet ebenfalls in lvh, damit Bühne und Strecke zusammenpassen
    (haupt.js und kanaele.js messen die Höhe der Bühne selbst). Browser ohne lvh behalten die bisherigen Werte. */
 @supports (height: 100lvh) {
-  html.film-an .film { height: calc(var(--film-s, 9.4) * 100lvh); }
+  html.film-an .film { height: calc(var(--film-s, 13.8) * 100lvh); }
   html.film-an .buehne {
     height: 100lvh;
     --unten: calc(100lvh - 100svh);
     --faden-b: calc(clamp(1.3rem, 3.6svh, 2.4rem) + var(--unten));
   }
-  html.kanalfilm .kanalfilm { height: calc(var(--kf-s, 6.4) * 100lvh); }
+  html.kanalfilm .kanalfilm { height: calc(var(--kf-s, 7.2) * 100lvh); }
   html.kanalfilm .kanal-buehne { height: 100lvh; --unten: calc(100lvh - 100svh); }
   html.kanalfilm .kanal-hinweis { bottom: calc(1.4rem + var(--unten, 0px)); }
   @media (max-aspect-ratio: 11/10) {
@@ -1939,6 +1989,12 @@ html.kanalfilm .kanal-hinweis {
     html.kanalfilm .kanal:visited { bottom: calc(1.3rem + var(--unten, 0px)); }
   }
 }
+/* Mit eigenem Scrollbereich (site.js) klappen die Leisten nicht: Sichtbar ist immer der kleine Bildschirm (svh, Leisten
+   da). Bühnen und Strecken rechnen dann in svh, ohne Überstand; nichts ragt unter den Rand. */
+html.eigen-scroll.film-an .film { height: calc(var(--film-s, 13.8) * 100svh); }
+html.eigen-scroll.film-an .buehne { height: 100svh; --unten: 0px; --faden-b: clamp(1.3rem, 3.6svh, 2.4rem); }
+html.eigen-scroll.kanalfilm .kanalfilm { height: calc(var(--kf-s, 7.2) * 100svh); }
+html.eigen-scroll.kanalfilm .kanal-buehne { height: 100svh; --unten: 0px; }
 
 .panel {
   max-width: 50rem;
@@ -1958,6 +2014,22 @@ html.kanalfilm .kanal-hinweis {
   left: .3rem; top: 1.62rem;
   width: .9rem; height: 1px;
   background: var(--gold);
+}
+
+/* Handy und schmale Fenster (Refik, 30.10.2026: Umbrüche an ungewollten Stellen, der Text passte nicht immer ganz
+   hinein und wirkte unproportioniert): keine automatische Silbentrennung mehr, sie trennte mitten in Wörtern und in
+   Links („wel-chen“, „Nutzungsbedin-gungen“). Dafür ausgewogene Zeilen ohne einzelnes Wort am Ende (text-wrap:
+   pretty); ein sehr langes Wort bricht nur im Notfall, dann ohne Strich (overflow-wrap). Kasten und Liste rücken
+   weniger ein, damit die Zeilen nicht zu kurz werden. Links werden nirgends getrennt. */
+a { hyphens: manual; }
+/* der Name „IT-Engel“ im Fließtext bricht nicht am Bindestrich um */
+.marke { white-space: nowrap; }
+@media (max-width: 47.99em) {
+  body { hyphens: manual; }
+  p, li, dd, figcaption, blockquote { text-wrap: pretty; }
+  .panel { padding-left: 1rem; }
+  .fakten li { padding-left: 1.75rem; }
+  .fakten li::before { left: .1rem; width: .8rem; }
 }
 
 /* Kontakt und Rechtliches */

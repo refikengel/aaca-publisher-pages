@@ -6,8 +6,8 @@
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoundedBoxGeometry } from "../vendor/three/addons/geometries/RoundedBoxGeometry.js";
-import { stoffFest as stoff, riefenTextur, malTextur, buerstTextur, rauheitTextur } from "./stoff.js";
-import { namen, SCHRIFT, ZIFFERN } from "./sprache.js";
+import { stoffFest as stoff, riefenTextur, malTextur, buerstTextur, rauheitTextur } from "./stoff.js?v=18";
+import { namen, SCHRIFT, ZIFFERN } from "./sprache.js?v=18";
 import { FARBEN, farbeVon } from "./farben.js";
 
 // die Farben der Stationen stehen in farben.js (ohne three.js); hier weitergereicht für die Szenen

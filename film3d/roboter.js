@@ -8,6 +8,7 @@
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
 import { RoundedBoxGeometry } from "../vendor/three/addons/geometries/RoundedBoxGeometry.js";
+import { leinwand } from "./stoff.js?v=18";
 
 const L1 = 0.38;   // Schulter bis Ellbogen
 const L2 = 0.36;   // Ellbogen bis Handgelenk
@@ -70,8 +71,7 @@ export class Roboter {
     var kurve = new THREE.SplineCurve(torsoProfil.map(function (p) { return new THREE.Vector2(p[0], p[1]); }));
     var displayPunkte = kurve.getPoints(160).filter(function (p) { return p.y >= 0.255 && p.y <= 0.49; })
       .map(function (p) { return new THREE.Vector2(p.x * 1.012, p.y); });
-    var dc = document.createElement("canvas");
-    dc.width = 512; dc.height = 256;
+    var dc = leinwand(512, 256);
     var dtex = this.displayTex = new THREE.CanvasTexture(dc);
     dtex.colorSpace = THREE.SRGBColorSpace;
     dtex.anisotropy = 8;

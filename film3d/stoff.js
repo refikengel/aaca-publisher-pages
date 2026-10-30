@@ -6,6 +6,7 @@
   der Station. So entsteht der Aufbau „wie gedruckt“ und der Abbau in umgekehrter Richtung.
 */
 import * as THREE from "../vendor/three/build/three.module.min.js";
+import { zufall, PIXEL } from "./texturpixel.js?v=17";
 
 /* --------------------------------------------------------------------- Scan */
 
@@ -62,48 +63,74 @@ export function stoffFest(art, werte) {
 
 /* ----------------------------------------------------------- Zufall, Rauschen */
 
-export function zufall(start) {
-  var n = start | 0;
-  return function () {
-    n = (n + 0x6D2B79F5) | 0;
-    var t = Math.imul(n ^ (n >>> 15), 1 | n);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// fester Zufall und Rauschen stehen in texturpixel.js (dort rechnet auch der Worker); zufall für die Szenen hier weiter
+export { zufall };
 
-// glattes Wertrauschen auf einem Gitter (kachelbar), Werte 0..1
-function rauschfeld(n, zellen, rnd) {
-  var gitter = new Float32Array(zellen * zellen), i, x, y;
-  for (i = 0; i < gitter.length; i++) { gitter[i] = rnd(); }
-  var out = new Float32Array(n * n);
-  for (y = 0; y < n; y++) {
-    var gy = y / n * zellen, y0 = Math.floor(gy), fy = gy - y0, y1 = (y0 + 1) % zellen;
-    fy = fy * fy * (3 - 2 * fy);
-    for (x = 0; x < n; x++) {
-      var gx = x / n * zellen, x0 = Math.floor(gx), fx = gx - x0, x1 = (x0 + 1) % zellen;
-      fx = fx * fx * (3 - 2 * fx);
-      var a = gitter[y0 * zellen + x0], b = gitter[y0 * zellen + x1], c = gitter[y1 * zellen + x0], d = gitter[y1 * zellen + x1];
-      out[y * n + x] = (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy;
-    }
-  }
-  return out;
-}
-
-function leinwand(w, h) {
+// Leinwand zum Malen der Texturen: im Hauptthread ein Canvas, im Worker des 3D-Bildes (bild3d-worker.js) ein
+// OffscreenCanvas (dort gibt es kein document); beide malen gleich. Auch für welt.js und roboter.js.
+export function leinwand(w, h) {
+  if (typeof document === "undefined") { return new OffscreenCanvas(w, h); }
   var c = document.createElement("canvas");
   c.width = w; c.height = h;
   return c;
 }
 
-function grauTextur(n, werte, wiederholen) {
-  var c = leinwand(n, n), ctx = c.getContext("2d"), bild = ctx.createImageData(n, n), i;
-  for (i = 0; i < n * n; i++) {
-    var v = Math.max(0, Math.min(255, Math.round(werte[i] * 255)));
-    bild.data[i * 4] = v; bild.data[i * 4 + 1] = v; bild.data[i * 4 + 2] = v; bild.data[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(bild, 0, 0);
-  var t = new THREE.CanvasTexture(c);
+/* ------------------------------------------------------- Vorab im Worker */
+
+// Die gemalten Texturen, die Grundstoffe, Maschine und Szenen anfordern (Art und Werte wie in texturpixel.js):
+// texturenVorab() lässt sie gleich zu Beginn der Vorbereitung in einem Worker rechnen, neben dem Hauptthread. Dort
+// kosteten die Pixelschleifen am Rechner zusammen rund 150 ms, am Handy ein Mehrfaches, in zwei langen Stücken
+// (Grundstoffe, Szenen mit Holz), in denen Film und Texte stillstanden. Hier gerechnet, malt der Hauptthread nur
+// noch das fertige Bild auf seine Leinwand. Fehlt eine Textur in der Liste, rechnet der Hauptthread sie beim Abruf
+// selbst, wie früher; ebenso ohne Worker, wenn er ausfällt oder nach 4 s nicht fertig ist.
+var VORAB = [
+  ["rauheit", [0.5, 0.35, 3]], ["rauheit", [0.5, 0.5, 9]], ["buerst", [0.5, 0.6]], ["riefen", [0.42, 0.16]],
+  ["holz", [[92, 62, 38], [52, 32, 20]]], ["holz", [[84, 54, 33], [46, 28, 17]]], ["holz", [[96, 64, 40], [56, 35, 21]]]
+];
+var vorab = new Map();
+function schluessel(art, werte) { return art + ":" + JSON.stringify(werte); }
+function pixelHolen(art, werte) {
+  return vorab.get(schluessel(art, werte)) || PIXEL[art].apply(null, werte);
+}
+
+// Promise, erfüllt, wenn die Pixel da sind oder der Worker ausfällt (nie abgelehnt)
+export function texturenVorab() {
+  return new Promise(function (fertig) {
+    var w, uhr = 0;
+    function ende() {
+      clearTimeout(uhr);
+      try { w.terminate(); } catch (e) { /* egal */ }
+      fertig();
+    }
+    try {
+      w = new Worker(new URL("./texturen-worker.js?v=17", import.meta.url), { type: "module" });
+    } catch (fehler) {
+      fertig();
+      return;
+    }
+    uhr = setTimeout(ende, 4000);
+    w.onmessage = function (e) {
+      var d = e.data;
+      if (d.fertig) { ende(); return; }
+      vorab.set(d.schluessel, { w: d.w, h: d.h, pixel: d.pixel });
+    };
+    w.onerror = ende;
+    w.postMessage(VORAB.map(function (v) { return [schluessel(v[0], v[1]), v[0], v[1]]; }));
+  });
+}
+
+// nach der Vorbereitung: die vorab gerechneten Pixel werden nicht mehr gebraucht (die Texturen haben ihre Leinwand)
+export function texturenVergessen() { vorab.clear(); }
+
+// Leinwand mit den Pixeln, als Textur
+function pixelTextur(p) {
+  var c = leinwand(p.w, p.h);
+  c.getContext("2d").putImageData(new ImageData(p.pixel, p.w, p.h), 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
+function grauTextur(p, wiederholen) {
+  var t = pixelTextur(p);
   t.colorSpace = THREE.NoColorSpace;
   if (wiederholen) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(wiederholen, wiederholen); }
   t.anisotropy = 4;
@@ -114,41 +141,17 @@ function grauTextur(n, werte, wiederholen) {
 
 // feine Unregelmäßigkeit für die Rauheit (Fingerabdrücke, Polierspuren): mittlerer Wert um basis
 export function rauheitTextur(basis, staerke, start, wiederholen) {
-  var n = 256, rnd = zufall(start || 7);
-  var a = rauschfeld(n, 8, rnd), b = rauschfeld(n, 32, rnd), c = rauschfeld(n, 64, rnd), w = new Float32Array(n * n);
-  for (var i = 0; i < w.length; i++) {
-    w[i] = basis + staerke * ((a[i] - 0.5) * 0.9 + (b[i] - 0.5) * 0.5 + (c[i] - 0.5) * 0.3);
-  }
-  return grauTextur(n, w, wiederholen || 1);
+  return grauTextur(pixelHolen("rauheit", [basis, staerke, start || 7]), wiederholen || 1);
 }
 
 // gedrehte Oberfläche: feine konzentrische Riefen um die Mitte (für die Deckel der Schichten)
 export function riefenTextur(basis, staerke) {
-  var n = 512, rnd = zufall(11), feld = rauschfeld(n, 16, rnd), w = new Float32Array(n * n);
-  for (var y = 0; y < n; y++) {
-    for (var x = 0; x < n; x++) {
-      var dx = x - n / 2 + 0.5, dy = y - n / 2 + 0.5, r = Math.sqrt(dx * dx + dy * dy);
-      var riefe = Math.sin(r * 1.9 + feld[y * n + x] * 3.0) * 0.5 + Math.sin(r * 0.37) * 0.25;
-      w[y * n + x] = basis + staerke * riefe + (rnd() - 0.5) * staerke * 0.5;
-    }
-  }
-  return grauTextur(n, w, 0);
+  return grauTextur(pixelHolen("riefen", [basis, staerke]), 0);
 }
 
 // gebürstet: Striche in einer Richtung (u)
 export function buerstTextur(basis, staerke) {
-  var w = 512, h = 64, c = leinwand(w, h), ctx = c.getContext("2d"), rnd = zufall(5), bild = ctx.createImageData(w, h);
-  var zeile = new Float32Array(h);
-  for (var y = 0; y < h; y++) { zeile[y] = (rnd() - 0.5); }
-  for (y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      var v = basis + staerke * (zeile[y] * 0.8 + (rnd() - 0.5) * 0.35 + Math.sin(x * 0.05 + zeile[y] * 9) * 0.08);
-      var g = Math.max(0, Math.min(255, Math.round(v * 255))), k = (y * w + x) * 4;
-      bild.data[k] = bild.data[k + 1] = bild.data[k + 2] = g; bild.data[k + 3] = 255;
-    }
-  }
-  ctx.putImageData(bild, 0, 0);
-  var t = new THREE.CanvasTexture(c);
+  var t = pixelTextur(pixelHolen("buerst", [basis, staerke]));
   t.colorSpace = THREE.NoColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 4;
@@ -157,23 +160,7 @@ export function buerstTextur(basis, staerke) {
 
 // Holzmaserung (Farbe), für Regal und Pult
 export function holzTextur(hell, dunkel) {
-  var w = 512, h = 512, c = leinwand(w, h), ctx = c.getContext("2d"), rnd = zufall(23), bild = ctx.createImageData(w, h);
-  var feld = rauschfeld(256, 8, rnd);
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      var f = feld[((y >> 1) % 256) * 256 + ((x >> 3) % 256)];
-      var ring = Math.sin((x * 0.11 + f * 9.0) + Math.sin(y * 0.013) * 2.0) * 0.5 + 0.5;
-      ring = Math.pow(ring, 2.2);
-      var t = Math.min(1, Math.max(0, ring * 0.75 + (rnd() - 0.5) * 0.12));
-      var k = (y * w + x) * 4;
-      bild.data[k] = hell[0] + (dunkel[0] - hell[0]) * t;
-      bild.data[k + 1] = hell[1] + (dunkel[1] - hell[1]) * t;
-      bild.data[k + 2] = hell[2] + (dunkel[2] - hell[2]) * t;
-      bild.data[k + 3] = 255;
-    }
-  }
-  ctx.putImageData(bild, 0, 0);
-  var tex = new THREE.CanvasTexture(c);
+  var tex = pixelTextur(pixelHolen("holz", [hell, dunkel]));
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 4;

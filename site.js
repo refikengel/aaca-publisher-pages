@@ -24,6 +24,71 @@
     if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", fn); } else { fn(); }
   }
 
+  /* ------------------------------------------------ eigener Scrollbereich */
+
+  // Auf Handys und Tablets scrollt die Seite in einem eigenen Bereich (der Rahmen #bereich um den Inhalt) statt im
+  // Fenster. Dann klappt der Browser seine Leisten beim Wischen nicht auf und zu: Das Fenster behält seine Größe,
+  // nichts verschiebt sich, und Film und Kanäle müssen sich nicht neu einstellen (Refik, 30.10.2026: beim
+  // Zurückwischen klappte die Leiste auf, Fenster und Bildausschnitt stellten sich neu ein). Am Handy gemessen in
+  // Chrome, Brave und DuckDuckGo: Scrollt das Fenster, springt seine Höhe beim Wischen zwischen zwei Werten hin und
+  // her, im eigenen Bereich nie. Der Bereich endet einen Pixel über dem unteren Rand (Stylesheet): Einen Bereich in
+  // genau Fenstergröße behandelt Chrome wie das Fenster selbst, dann klappten die Leisten wieder. Am Rechner bleibt
+  // das Fenster der Scrollbereich (dort klappt nichts, und die Tastatur scrollt auch ohne Fokus). Die übrigen Skripte
+  // lesen und setzen die Scrollstelle über window.seite; mit ?scroll=fenster in der Adresse scrollt auch am Handy das
+  // Fenster (zum Vergleichen).
+  var eigenerBereich = !!(window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches) &&
+    !/[?&]scroll=fenster(?:&|#|$)/.test(window.location.search);
+  if (eigenerBereich) { root.classList.add("eigen-scroll"); }
+  var rahmen = null;
+  function bereichEl() { return rahmen || (rahmen = document.getElementById("bereich")); }
+  var seite = window.seite = {
+    eigen: eigenerBereich,
+    // was scrollt: Ziel der Ereignisse scroll und von scrollTo
+    ziel: function () { return eigenerBereich ? (bereichEl() || window) : window; },
+    y: function () {
+      if (eigenerBereich) { var b = bereichEl(); return b ? b.scrollTop : 0; }
+      return window.pageYOffset || root.scrollTop || 0;
+    },
+    // sichtbare Höhe des Scrollbereichs
+    hoehe: function () { var b = eigenerBereich && bereichEl(); return b ? b.clientHeight : window.innerHeight; },
+    nach: function (top, art) {
+      var z = seite.ziel();
+      if (z && z.scrollTo) { z.scrollTo({ top: top, left: 0, behavior: art || "instant" }); }
+    }
+  };
+
+  // Beim Neuladen stellt der Browser die Scrollstelle des Fensters selbst wieder her, die eines eigenen Bereichs
+  // nicht. Darum steht die Stelle im Verlaufseintrag dieses Tabs (history.state, dort, wo der Browser auch die
+  // Scrollstelle des Fensters führt; kein Cookie, kein localStorage, nichts gesendet) und wird beim Neuladen und
+  // beim Zurückkehren wieder gesetzt.
+  function stelleMerken() {
+    if (!eigenerBereich || !window.history || !window.history.replaceState) { return; }
+    try {
+      var alt = window.history.state, neuStand = {};
+      if (alt && typeof alt === "object") { for (var k in alt) { if (Object.prototype.hasOwnProperty.call(alt, k)) { neuStand[k] = alt[k]; } } }
+      neuStand.seiteY = Math.round(seite.y());
+      window.history.replaceState(neuStand, "");
+    } catch (fehler) { /* dann beginnt die Seite oben */ }
+  }
+  function initStelle() {
+    if (!eigenerBereich) { return; }
+    var s = window.history && window.history.state, y = s && typeof s.seiteY === "number" ? s.seiteY : 0;
+    if (y > 0) {
+      seite.nach(y);
+      // Bilder und Schrift können die Seite noch verschieben: nach dem Laden einmal nachsetzen, wenn noch niemand
+      // gescrollt hat
+      var bewegt = false;
+      seite.ziel().addEventListener("scroll", function () { bewegt = true; }, { passive: true, once: true });
+      window.addEventListener("load", function () { if (!bewegt || Math.abs(seite.y() - y) < 2) { seite.nach(y); } });
+    }
+    var uhr = 0;
+    seite.ziel().addEventListener("scroll", function () {
+      window.clearTimeout(uhr);
+      uhr = window.setTimeout(stelleMerken, 300);
+    }, { passive: true });
+    window.addEventListener("pagehide", stelleMerken);
+  }
+
   /* ------------------------------------------------------- Sprachschalter */
 
   // Genau eine Sprache zeigen. Vorrang hat ?lang=de|en in der Adresse, dann #de/#en (Links auf die
@@ -106,6 +171,13 @@
 
   function initScroll() {
     var kopf = document.querySelector(".site-header");
+    // Höhe der Kopfzeile als --kopf-ist: Im eigenen Scrollbereich liegt sie über dem Film, ohne fest zu sein
+    // (Stylesheet, html.eigen-scroll.film-an .site-header)
+    if (kopf && eigenerBereich) {
+      var kopfHoehe = function () { root.style.setProperty("--kopf-ist", kopf.offsetHeight + "px"); };
+      kopfHoehe();
+      if (window.ResizeObserver) { new ResizeObserver(kopfHoehe).observe(kopf); } else { window.addEventListener("resize", kopfHoehe); }
+    }
     var oben = neu("button", "nach-oben");
     oben.type = "button";
     oben.setAttribute("data-label-de", "Nach oben");
@@ -115,19 +187,35 @@
     oben.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 19V5M6 11l6-6 6 6"/></svg>';
     document.body.appendChild(oben);
 
-    var geplant = false;
+    // Die Scrollstelle wird im Scroll-Ereignis gelesen, angewandt erst im nächsten Bild: Läuft der Film, schreibt er
+    // in jedem Bild Stile, bevor dieser Rückruf drankommt; hier gelesen zwänge das den Browser zu einer zusätzlichen
+    // Stilberechnung je Bild (am Handy gemessen rund 5 % der Scrollzeit). Im Ereignis ist noch nichts geschrieben.
+    // Auf Handys und Tablets (eigener Scrollbereich) erscheint „Nach oben“ nur beim Zurückwischen und geht 2,5 Sekunden
+    // danach wieder: Beim Lesen (Wischen nach unten) lag der Knopf sonst dauernd über dem Text (am Handy gesehen).
+    var geplant = false, y = 0, yVorher = 0, hochBis = 0, uhrOben = 0;
+    function lesen() { y = seite.y(); }
     function messen() {
       geplant = false;
-      var y = window.pageYOffset || root.scrollTop || 0;
       if (kopf) { kopf.classList.toggle("is-scrolled", y > 8); }
-      oben.classList.toggle("sichtbar", y > 900);
+      if (eigenerBereich) {
+        if (y < yVorher - 4) {
+          hochBis = Date.now() + 2500;
+          window.clearTimeout(uhrOben);
+          uhrOben = window.setTimeout(planen, 2600);
+        } else if (y > yVorher + 4) { hochBis = 0; }
+        if (Math.abs(y - yVorher) > 4) { yVorher = y; }
+        oben.classList.toggle("sichtbar", y > 900 && Date.now() < hochBis);
+      } else {
+        oben.classList.toggle("sichtbar", y > 900);
+      }
     }
-    function planen() { if (!geplant) { geplant = true; window.requestAnimationFrame(messen); } }
-    window.addEventListener("scroll", planen, { passive: true });
+    function planen() { lesen(); if (!geplant) { geplant = true; window.requestAnimationFrame(messen); } }
+    seite.ziel().addEventListener("scroll", planen, { passive: true });
     window.addEventListener("resize", planen);
     oben.addEventListener("click", function () {
-      window.scrollTo({ top: 0, behavior: reduziert() ? "auto" : "smooth" });
+      seite.ziel().scrollTo({ top: 0, behavior: reduziert() ? "auto" : "smooth" });
     });
+    lesen();
     messen();
   }
 
@@ -148,7 +236,7 @@
             if (e.isIntersecting) { e.target.classList.add("is-visible"); beobachter.unobserve(e.target); }
           });
         }, { rootMargin: "0px 0px -8% 0px", threshold: 0.06 });
-        var h = window.innerHeight;
+        var h = seite.hoehe();
         elemente.forEach(function (e) {
           if (e.getBoundingClientRect().top > h * 0.98) { e.classList.add("is-armed"); beobachter.observe(e); }
         });
@@ -156,7 +244,7 @@
         elemente.forEach(function (e) { e.classList.add("is-visible"); });
       }
     }
-    window.addEventListener("scroll", scharfStellen, { passive: true, once: true });
+    seite.ziel().addEventListener("scroll", scharfStellen, { passive: true, once: true });
   }
 
   /* ------------------------------------------------------------ Pause-Taste */
@@ -184,6 +272,9 @@
   }
 
   bereit(function () {
+    // ohne Rahmen (eine Seite ohne #bereich) bleibt das Fenster der Scrollbereich, sonst ließe sich nichts scrollen
+    if (eigenerBereich && !bereichEl()) { eigenerBereich = seite.eigen = false; root.classList.remove("eigen-scroll"); }
+    sicher(initStelle);
     sicher(initScroll);
     sicher(initSprache);
     sicher(initReveal);

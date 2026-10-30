@@ -11,6 +11,10 @@
   eigenem Canvas:
     folge.js   vorberechnete Bildfolge (WebP): sofort da, braucht kaum Rechenleistung;
     bild3d.js  Echtzeit-3D (three.js, selbst gehostet, MIT-Lizenz), Stufen 3 bis 0 (welt.js).
+  Echtzeit-3D rechnet in einem Web Worker (bild3d-worker.js, in einem OffscreenCanvas; hier vertritt es
+  bild3d-vertreter.js mit derselben Schnittstelle), wo der Browser WebGL 2 in einem OffscreenCanvas kann, sonst wie
+  früher hier im Hauptthread. Im Worker treffen die Vorbereitung und die Wartezeiten des Grafiktreibers nur das
+  3D-Bild: Scrollen, Texte, Skala und Bildfolge laufen hier ungestört weiter.
   Zuerst zeigt der Kreis immer die Bildfolge. Schafft das Gerät Echtzeit-3D (grundFuerFolge, geprüft vor dem
   Laden von three.js), wird es währenddessen in kleinen Schritten vorbereitet und übernimmt dann an derselben
   Stelle (kurze Überblendung; bis dahin lädt die Folge nur Bilder nahe der aktuellen Stelle). Wird das
@@ -40,7 +44,8 @@
 
   Für Prüfungen: ?film=folge nur die Bildfolge; ?film=3d Echtzeit-3D auch auf Touch- und schwachen Geräten
   (mit Überbrückung wie sonst); ?film=nur3d gleich Echtzeit-3D ohne Überbrückung, auch mit Software-Grafik
-  (für das Werkzeug, das die Bildfolge rendert, und für Messungen).
+  (für das Werkzeug, das die Bildfolge rendert, und für Messungen), im Hauptthread (das Werkzeug holt seine Bilder
+  mit festem Zufall der Seite); ?3d=haupt oder ?3d=worker legt fest, wo Echtzeit-3D rechnet (zum Vergleichen).
 */
 // geänderte Module mit Versionsangabe (wie haupt.js in film.js): nach einer Aktualisierung trifft so kein
 // zwischengespeichertes altes Modul auf ein neues
@@ -51,6 +56,15 @@ import { MITTE, ENDE, ZEIT_JE_HOEHE, zustand as zustandRechnen } from "./fahrpla
 import { FOLGE } from "./folge-daten.js?v=9";
 
 var root = document.documentElement;
+// was scrollt: auf Handys und Tablets ein eigener Bereich (body), sonst das Fenster (site.js, window.seite); ohne
+// site.js das Fenster
+var seite = window.seite || {
+  eigen: false,
+  ziel: function () { return window; },
+  y: function () { return window.pageYOffset || root.scrollTop || 0; },
+  hoehe: function () { return window.innerHeight; },
+  nach: function (top, art) { window.scrollTo({ top: top, left: 0, behavior: art || "instant" }); }
+};
 
 function mq(q) { return window.matchMedia ? window.matchMedia(q) : null; }
 var mqReduce = mq("(prefers-reduced-motion: reduce)");
@@ -67,6 +81,11 @@ var erzwungen = false, kaputt = false;
 var pruef = (function () {
   var m = /[?&]film=(folge|3d|nur3d)(?:&|#|$)/.exec(window.location.search);
   return m ? m[1] : "";
+})();
+// wo Echtzeit-3D rechnet: "haupt" (hier), "worker" oder leer (Worker, wo möglich; mit ?film=nur3d hier)
+var ort3d = (function () {
+  var m = /[?&]3d=(haupt|worker)(?:&|#|$)/.exec(window.location.search);
+  return m ? m[1] : (pruef === "nur3d" ? "haupt" : "");
 })();
 
 function gedaempft() { return !!(mqReduce && mqReduce.matches); }
@@ -105,8 +124,12 @@ function grundFuerFolge() {
   }
   if (pruef === "3d") { return ""; }
   var n = window.navigator || {};
-  if (n.hardwareConcurrency && n.hardwareConcurrency <= (touch ? 4 : 2)) { return "wenige Kerne"; }
-  if (n.deviceMemory && n.deviceMemory <= 2) { return "wenig Speicher"; }
+  // Brave verfälscht Kernzahl und Speicher zum Schutz vor Fingerabdrücken, bei jedem Besuch anders (gemessen am
+  // Rechner mit 12 Kernen: 9, dann 5; Speicher 32, dann 16): dort zählt nur der Rechentest, sonst bekäme dasselbe
+  // Handy mal Echtzeit-3D und mal die Bildfolge. Wer es doch nicht schafft, holt die laufende Anpassung zurück.
+  var verfaelscht = !!n.brave;
+  if (!verfaelscht && n.hardwareConcurrency && n.hardwareConcurrency <= (touch ? 4 : 2)) { return "wenige Kerne"; }
+  if (!verfaelscht && n.deviceMemory && n.deviceMemory <= 2) { return "wenig Speicher"; }
   if (rechenfaktor(touch) > (touch ? LANGSAM_AB_TOUCH : LANGSAM_AB)) { return "langsames Gerät"; }
   return "";
 }
@@ -200,7 +223,8 @@ function messen() {
   // die Skala in voller Pixeldichte bis 3 (Handys): feine Linien und die kleine Schrift im Überblick bleiben so
   // scharf wie der Text daneben; sie kostet je Bild nur wenige Zeichenbefehle
   dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-  filmTop = film.getBoundingClientRect().top + (window.pageYOffset || 0);
+  yGemerkt = seite.y();
+  filmTop = film.getBoundingClientRect().top + yGemerkt;
   var ar = anker.getBoundingClientRect(), br = buehne.getBoundingClientRect();
   lay.x = ar.left - br.left + ar.width / 2;
   lay.y = ar.top - br.top + ar.height / 2;
@@ -265,12 +289,18 @@ function domAbgleich(s) {
 
 /* -------------------------------------------------------- weiches Scrollen */
 
-function lies() { return (window.pageYOffset || root.scrollTop || 0); }
+function lies() { return seite.y(); }
+// Die Scrollstelle für die Bildschleife: gelesen im Scroll-Ereignis (dort hat in diesem Bild noch niemand Stile
+// geschrieben) und beim Einschalten, Messen und wenn der Film ins Bild kommt. In der Bildschleife selbst zu lesen,
+// nachdem Kanäle-Film, Skala oder Kapitel schon Werte gesetzt haben, zwänge den Browser zu einer zusätzlichen
+// Stilberechnung je Bild (am Handy gemessen einige Prozent der Scrollzeit).
+var yGemerkt = 0;
 var gleit = { aktiv: false, ziel: 0, ist: 0 };
 
 function radErlaubt(e) {
   // gedämpft: das Mausrad scrollt wie überall, ohne Nachgleiten
-  if (!an || !weichesRad || gedaempft() || e.ctrlKey || e.metaKey || e.defaultPrevented) { return false; }
+  // (im eigenen Scrollbereich, siehe oben, scrollt das Rad immer selbst: das weiche Rad bewegt nur das Fenster)
+  if (!an || !weichesRad || seite.eigen || gedaempft() || e.ctrlKey || e.metaKey || e.defaultPrevented) { return false; }
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { return false; }
   // eigene Bildlaufbereiche (z. B. ausgeklappte Inhalte) behalten ihr normales Verhalten
   var el = e.target;
@@ -308,12 +338,14 @@ function gleiten(dt) {
 // läuft wieder jedes Bild.
 // Auf Handys und Tablets nach 8 Sekunden ohne Scrollen nur noch 15 Bilder pro Sekunde (der Akku zählt dort mehr als
 // die Feinheit einer ruhigen Bewegung).
-var IM_STAND_MS = 30, STAND_NACH_MS = 400, STAND_LANGSAM_NACH_MS = 8000, IM_STAND_LANGSAM_MS = 66;
+// Auf Touch-Geräten läuft nach dem Wischen noch 1,5 Sekunden jedes Bild: In dieser Zeit misst die Qualitätsanpassung
+// (qualitaet; beim Wischen selbst misst sie dort nicht).
+var IM_STAND_MS = 30, STAND_NACH_MS = 400, STAND_NACH_TOUCH_MS = 1500, STAND_LANGSAM_NACH_MS = 8000, IM_STAND_LANGSAM_MS = 66;
 var letzteZeichnung = 0, imStandVorher = false;
 function standTakt() { return beruehrung() && ruhe() > STAND_LANGSAM_NACH_MS ? IM_STAND_LANGSAM_MS : IM_STAND_MS; }
 function imStand() {
-  if (!bild || !bild.dauerlauf || geht || gleit.aktiv || ruhe() < STAND_NACH_MS) { return false; }
-  return Math.abs(klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE) - sGl) < 0.0005;
+  if (!bild || !bild.dauerlauf || geht || gleit.aktiv || ruhe() < (beruehrung() ? STAND_NACH_TOUCH_MS : STAND_NACH_MS)) { return false; }
+  return Math.abs(klemme((yGemerkt - filmTop) / Math.max(1, H), 0, ENDE) - sGl) < 0.0005;
 }
 
 // Schleife des Hero (folge.js, schleife-daten.js): Zeigt die Bildfolge das Bild im Kreis und steht die Seite am
@@ -396,22 +428,34 @@ function schleife(jetzt) {
   var dt = klemme((jetzt - letzte) / 1000, 0, stand ? 0.1 : 0.05), roh = (jetzt - letzte) / 1000;
   letzte = jetzt;
   gleiten(dt);
-  var ohneGleiten = gedaempft(), weiter = false;
+  var weiter = false;
+  if (stufeWartet >= 0 && ruhe() > 200) { stufeSetzen(stufeWartet, jetzt); }
   if (sichtbar) {
     kopfPruefen();
-    var ziel_ = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
+    var ziel_ = klemme((yGemerkt - filmTop) / Math.max(1, H), 0, ENDE);
     var diff = ziel_ - sGl;
-    // große Sprünge (Links, Pos1/Ende) und gedämpft sofort, sonst eine leichte Annäherung (das Rad ist
-    // schon geglättet)
-    if (ohneGleiten || Math.abs(diff) > 2.5) { sGl = ziel_; } else { sGl += diff * (1 - Math.exp(-dt / 0.06)); }
+    // Die Szene folgt der Scrollstelle mit einer kurzen Annäherung (Zeitkonstante tau): so wirkt auch ein schneller
+    // Wischer auf dem Handy oder ein kurzer Hänger des Hauptthreads nicht sprunghaft. Je weiter sie zurückliegt,
+    // desto schneller holt sie auf (eine Zehntelsekunde Rückstand ist in wenigen Bildern weg, ohne Sprung); sofort
+    // springt sie nur bei echten Sprüngen (Links, Pos1/Ende: mehr als vier Bildschirmhöhen). Gedämpft („Bewegung
+    // reduzieren“) ist die Annäherung kürzer, aber auch dort kein harter Schnitt: Refik (30.10.2026) wünscht sich das
+    // Scrollen am Handy weicher, und sein Handy läuft mit „Animationen aus“. Die Szene bewegt sich dabei nur, solange
+    // sie der Scrollstelle nachkommt (das Mausrad glättet der Browser selbst).
+    var tau = gedaempft() ? 0.05 : (beruehrung() ? 0.1 : 0.07);
+    if (Math.abs(diff) > 4) { sGl = ziel_; }
+    else { sGl += diff * (1 - Math.exp(-dt * (1 + 2 * Math.abs(diff)) / tau)); }
     // Filmzeit: folgt der Stelle (wie die Bildfolge); dazu läuft im Leerlauf die Zeit weiter (auch gedämpft: die
     // ruhige Eigenbewegung bleibt, nur die großen Bewegungen sind ans Scrollen gebunden)
     leerlauf += dt;
     zeit = sGl * ZEIT_JE_HOEHE + leerlauf;
     if (bild) {
-      zeichneBild();
-      // gemessen wird nur beim Scrollen und im ersten Bild danach nicht (die halbe Bildrate im Stand ist Absicht)
-      if (bild && bild.wachsam && !stand && !imStandVorher) { qualitaet(jetzt, roh); }
+      // gemessen wird nicht im Stand und im ersten Bild danach (die halbe Bildrate im Stand ist Absicht), auf
+      // Touch-Geräten auch nicht beim Wischen (siehe messenJetzt); das 3D-Bild im Worker misst den Abstand seiner
+      // Bilder selbst (bild3d-vertreter.js), sonst zählt dieses Bild
+      var messen = !!(bild.wachsam && !stand && !imStandVorher && messenJetzt());
+      zeichneBild(messen, beruehrung() && ruhe() < LEICHT_BIS_MS);
+      if (bild && bild.messwerte) { bild.messwerte(qualitaet, jetzt); }
+      else if (bild && messen) { qualitaet(jetzt, roh); }
       imStandVorher = stand;
     } else {
       zeichneVorlauf();
@@ -448,6 +492,14 @@ function zeichneVorlauf() {
 // Stand läuft die Schleife absichtlich mit halber Bildrate, siehe imStand); ein neuer Anlauf setzt die Zeit
 // zurück (siehe starten).
 var FENSTER_S = 1.5, FENSTER_MIN_BILDER = 20, FENSTER_MAX_S = 4;
+// Auf Touch-Geräten zählen nur die Bilder in den 1,5 Sekunden nach dem Wischen (ab 0,15 s danach), nicht das Wischen
+// selbst: Am Handy zeichnet der Grafikprozess beim Wischen auch die gescrollte Seite, die Bilder des 3D kommen dann
+// langsamer, und die Qualität sank nach jedem schnellen Wischen auf Stufe 1 oder 0, obwohl das Handy das 3D im Stand
+// mühelos schafft (am Handy gemessen, Brave und Chrome; Refik wünscht keinen Qualitätsverlust). Beim Wischen wird das
+// 3D dort stattdessen leichter (LEICHT_BIS_MS, welt.render). Schafft ein Gerät das 3D auch nach dem Wischen nicht,
+// sinkt die Qualität wie bisher. Am Rechner zählt wie bisher das Scrollen.
+var MESSEN_AB_MS = 150, LEICHT_BIS_MS = 150;
+function messenJetzt() { return !beruehrung() || (ruhe() >= MESSEN_AB_MS && !fingerAufGlas); }
 function qualitaet(jetzt, roh) {
   if (kommt && kommt.art === "folge") { return; }   // der Wechsel zur Bildfolge läuft schon
   // den Anlauf nach dem Start und nach jedem Wechsel nicht mitzählen: 60 bzw. 20 Bilder, auf langsamen
@@ -469,21 +521,34 @@ function qualitaet(jetzt, roh) {
     qual.langsam = 0;
   }
   if (bild.stufe > 0 && mittel > 1 / 45) {
-    bild.setzeStufe(mittel > 1 / 15 ? 0 : bild.stufe - 1); stufeMelden(); messen();
-    qual.ueberspringen = 20; qual.ab = jetzt + 300;
+    var neu = mittel > 1 / 15 ? 0 : bild.stufe - 1;
+    // Der Wechsel baut die Nachbearbeitung neu, ein kurzer Hänger: nicht mitten im Wischen (dort sähe man ihn als
+    // Sprung), sondern beim nächsten Innehalten (schleife); bei sehr langsamen Bildern sofort, da fällt er nicht auf
+    if (mittel > 1 / 12) { stufeSetzen(neu, jetzt); } else { stufeWartet = stufeWartet < 0 ? neu : Math.min(stufeWartet, neu); }
   }
 }
 
+// eine leichtere Stufe des 3D-Bildes setzen (nur abwärts; aufwärts geht es nie von selbst)
+var stufeWartet = -1;
+function stufeSetzen(n, jetzt) {
+  stufeWartet = -1;
+  if (!bild || bild.art !== "3d" || n >= bild.stufe) { return; }
+  bild.setzeStufe(n); stufeMelden(); messen();
+  qual.ueberspringen = 20; qual.ab = jetzt + 300;
+}
+
 function kopfPruefen() {
-  var ende = lies() > filmTop + ENDE * H - 0.04 * H;
+  var ende = yGemerkt > filmTop + ENDE * H - 0.04 * H;
   if (ende !== filmEnde) { filmEnde = ende; root.classList.toggle("film-ende", ende); }
 }
 
-function zeichneBild() {
+// messen: dieses Bild zählt für die Qualitätsanpassung (liest nur der Stellvertreter im Worker; undefined davor ist
+// die Welle, die es nur im Werkzeug der Bildfolge gibt); leicht: beim Wischen auf Touch-Geräten (welt.render)
+function zeichneBild(messen, leicht) {
   zustand(sGl);
   var q = bild, g = geht;
   try {
-    q.zeichne(Z, zeit, lay);
+    q.zeichne(Z, zeit, lay, undefined, messen, leicht);
   } catch (fehler) {
     ausgefallen(q);
     return;
@@ -567,16 +632,62 @@ function stufeMelden() {
   if (bild) {
     root.setAttribute("data-film-quelle", bild.art);
     root.setAttribute("data-film-stufe", String(bild.stufe));
+    if (bild.art === "3d") { root.setAttribute("data-film-ort", bild.imWorker ? "worker" : "hauptthread"); }
+    else { root.removeAttribute("data-film-ort"); }
   }
 }
 
-// wie lange (ms) zuletzt nicht gescrollt wurde, und ein Promise auf die nächste Pause von mindestens 250 ms
-var zuletztGescrollt = -1e9;
+// wie lange (ms) zuletzt nicht gescrollt wurde; als Scrollen zählen auch das Mausrad, Tasten und ein Finger auf
+// dem Glas (dann kommt das Scrollen gleich), fingerAufGlas: gerade berührt
+var zuletztGescrollt = -1e9, fingerAufGlas = false;
 function ruhe() { return window.performance.now() - zuletztGescrollt; }
-function scrollpause() {
-  return new Promise(function (fertig) {
-    (function pruefen() { if (ruhe() >= 250) { fertig(); } else { window.setTimeout(pruefen, 120); } })();
-  });
+function aktivitaet() { zuletztGescrollt = window.performance.now(); }
+
+// Darf die Vorbereitung von Echtzeit-3D jetzt einen Schritt machen (bild3d.js fragt vor jedem)? Steht noch kein Bild
+// im Kreis, stört nichts. Sonst zeigt der Kreis bis dahin die Bildfolge, und kein schwerer Schritt (am Rechner 20 bis
+// 200 ms am Stück, am Handy vier- bis fünfmal so lange) soll mitten ins Scrollen fallen: dann stünden Film und Texte
+// so lange still, während die Seite weiterzieht, und sprängen danach. Am Rechner laufen leichte Schritte immer und
+// schwere in einer Pause von 150 ms; wer das Mausrad ohne Pause dreht, bekommt sie trotzdem, aber mit Ruhe dazwischen:
+// nach einem schweren Schritt von d ms mindestens 3 · d ms ohne (höchstens ein Viertel der Zeit Arbeit, mindestens
+// 120 ms Abstand; dauer ist die des letzten schweren Schritts, bild3d.js). Das ist ein kurzer Hänger hier und da,
+// statt dass Echtzeit-3D erst nach dem Lesen kommt: vorher wartete die Vorbereitung auf Pausen von 250 ms, bei
+// gleichmäßigem Scrollen also bis zum Stillstand (gemessen: nach 16 s noch nicht da). Auf Touch-Geräten nie mit
+// einem Finger auf dem Glas und erst 300 ms (schwer: 600 ms) nach dem letzten Scrollen, also auch nach dem
+// Auslaufen eines Wischers.
+var letzterSchwerer = 0;
+function frei(schwer, dauer) {
+  if (!bild) { return true; }
+  var sch = window.navigator && window.navigator.scheduling;
+  if (sch && sch.isInputPending && sch.isInputPending()) { return false; }
+  var r = ruhe();
+  if (beruehrung()) { return !fingerAufGlas && r >= (schwer ? 600 : 300); }
+  if (!schwer) { return true; }
+  var jetzt = window.performance.now();
+  if (r < 150 && jetzt - letzterSchwerer < Math.max(120, 4 * (dauer || 100))) { return false; }
+  letzterSchwerer = jetzt;
+  return true;
+}
+
+// die Module von Echtzeit-3D: geholt, sobald feststeht, dass dieses Gerät 3D bekommt, also gleich beim Start und
+// nicht erst, wenn die Bildfolge schon steht (das kostete am Rechner rund 0,6 s). Im Worker (bild3d-vertreter.js)
+// holt hier nur der kleine Stellvertreter; er startet den Worker gleich (vorladen), der dann three.js und die
+// Module des Films lädt, neben der Seite. Im Hauptthread (bild3d.js und mit ihm three.js, etwa 0,7 MB) wird dabei nur
+// der Modulcode ausgeführt, gebaut wird erst in der Vorbereitung. ohneWorker: im Worker geht es nicht (kein WebGL 2
+// im OffscreenCanvas, Worker oder seine Module nicht ladbar, siehe bild3d-vertreter.js); dann von da an hier.
+var modul3d = null, ohneWorker = false;
+function imWorkerMoeglich() {
+  if (ohneWorker || ort3d === "haupt") { return false; }
+  return typeof OffscreenCanvas === "function" && typeof Worker === "function" &&
+    typeof HTMLCanvasElement !== "undefined" && typeof HTMLCanvasElement.prototype.transferControlToOffscreen === "function";
+}
+function modul3dHolen() {
+  if (!modul3d) {
+    modul3d = imWorkerMoeglich()
+      ? import("./bild3d-vertreter.js?v=18").then(function (m) { m.vorladen(); return m; })
+      : import("./bild3d.js?v=18");
+    modul3d.then(null, function () { modul3d = null; });
+  }
+  return modul3d;
 }
 
 // ein eigenes Canvas für eine Quelle (ein Canvas kann nur eine Art Kontext haben); es liegt über den
@@ -597,6 +708,7 @@ function weiterschalten() {
     var grund = grundFuerFolge();
     ziel = grund ? "folge" : "3d";
     if (grund) { root.setAttribute("data-film-grund", grund); }
+    if (ziel === "3d") { modul3dHolen(); }
   }
   if (!bild) {
     if (ziel === "3d" && (pruef === "nur3d" || folgeKaputt)) { vorbereiten("3d"); }
@@ -626,16 +738,18 @@ function verwerfen(k) {
 function vorbereitungLaufen(k) {
   k.laeuft = true;
   var weiterMachen = function () { return an && kommt === k; };
-  // läuft schon ein Bild (die Bildfolge), arbeitet die Vorbereitung von Echtzeit-3D nur in Scrollpausen: das
-  // Laden von three.js, das Anlegen des Grafikkontexts und jeder ihrer Schritte kostet einen Augenblick, das
-  // Wischen soll dabei nicht stocken
-  var mitRuhe = k.art === "3d" && !!bild;
-  var holen = (mitRuhe && !k.modul ? scrollpause() : Promise.resolve()).then(function () {
-    return k.modul || (k.art === "3d" ? import("./bild3d.js?v=14") : import("./folge.js?v=14"));
-  });
+  // läuft schon ein Bild (die Bildfolge), legt die Vorbereitung von Echtzeit-3D ihre schweren Schritte nicht mitten
+  // ins Scrollen (frei); das Anlegen des Grafikkontexts zählt dazu
+  var mitRuhe = k.art === "3d";
+  var holen = Promise.resolve(k.modul || (k.art === "3d" ? modul3dHolen() : import("./folge.js?v=14")));
   holen.then(function (m) {
     k.modul = m;
-    return mitRuhe && !k.quelle ? scrollpause() : null;
+    // im Worker entsteht der Kontext dort, und die Vorbereitung hält hier nichts auf
+    if (m.imWorker) { mitRuhe = false; }
+    if (!mitRuhe || k.quelle) { return null; }
+    return new Promise(function (weiter) {
+      (function pruefen() { if (!weiterMachen() || frei(true)) { weiter(); } else { window.setTimeout(pruefen, 60); } })();
+    });
   }).then(function () {
     var m = k.modul;
     if (kommt !== k) { return false; }
@@ -655,15 +769,27 @@ function vorbereitungLaufen(k) {
       }
       if (an) { messen(); }
     }
-    return k.quelle.vorbereiten(weiterMachen, function () { return sGl; }, mitRuhe ? ruhe : null);
+    // Im Worker hält die Vorbereitung den Hauptthread nicht auf, sie belastet aber den Grafikprozess (Shader verknüpfen,
+    // Szenen hochladen), den die Seite fürs Scrollen mit ihr teilt: auf Touch-Geräten darum dieselbe Ruhe wie im
+    // Hauptthread (frei, der Stellvertreter gibt sie weiter), am Rechner ohne (dort gemessen ohne Lücken).
+    var ruhe = mitRuhe || (k.art === "3d" && beruehrung()) ? frei : null;
+    return k.quelle.vorbereiten(weiterMachen, function () { return sGl; }, ruhe);
   }).then(function (fertig) {
     k.laeuft = false;
     if (kommt !== k || !fertig || !an) { return; }
     zeigen(k);
-  }).then(null, function () {
+  }).then(null, function (fehler) {
     k.laeuft = false;
     if (kommt !== k) { return; }
     verwerfen(k);
+    // im Worker geht es nicht (etwa ältere Safari ohne WebGL 2 im OffscreenCanvas): Echtzeit-3D hier im Hauptthread,
+    // wie früher (sind auch dort die Module nicht ladbar, bleibt es bei der Bildfolge)
+    if (fehler && fehler.ohneWorker && !ohneWorker) {
+      ohneWorker = true;
+      modul3d = null;
+      vorbereiten("3d");
+      return;
+    }
     gescheitert(k.art);
   });
 }
@@ -673,9 +799,8 @@ function zeigen(k) {
   kommt = null;
   var q = k.quelle, vorher = bild;
   bild = q;
-  // das erste Bild: wer gleich losscrollt, soll nicht von der Vorbereitung von Echtzeit-3D gebremst werden
-  // (sie beginnt erst nach einer ersten Ruhepause, siehe scrollpause)
-  if (!vorher) { zuletztGescrollt = window.performance.now(); }
+  // (wer gleich losscrollt, wird von der Vorbereitung von Echtzeit-3D nicht gebremst: frei() hält ihre schweren
+  // Schritte aus dem Scrollen heraus; wer erst schaut, bekommt 3D ohne eigene Wartezeit)
   if (vorher) {
     if (geht) { geht.quelle.freigeben(); }
     // so lange wie die Überblendung im Stylesheet (gedämpft kürzer), mit etwas Spielraum
@@ -689,7 +814,8 @@ function zeigen(k) {
   messen();
   // gleich das erste Bild an der aktuellen Stelle (nicht erst mit dem nächsten Scrollen)
   if (sichtbar) {
-    sGl = klemme((lies() - filmTop) / Math.max(1, H), 0, ENDE);
+    yGemerkt = lies();
+    sGl = klemme((yGemerkt - filmTop) / Math.max(1, H), 0, ENDE);
     zeit = sGl * ZEIT_JE_HOEHE + leerlauf;
     zeichneBild();
   }
@@ -818,11 +944,11 @@ function steuern() {
   if (!moeglich()) { ausschalten(); return; }
   if (an) { return; }
   var anker_ = document.getElementById("weg"), versatz = null;
-  if (anker_ && lies() > 40 && anker_.getBoundingClientRect().top < window.innerHeight * 0.9) {
+  if (anker_ && lies() > 40 && anker_.getBoundingClientRect().top < seite.hoehe() * 0.9) {
     versatz = anker_.getBoundingClientRect().top;
   }
   einschalten();
-  if (an && versatz !== null) { window.scrollTo(0, anker_.getBoundingClientRect().top + lies() - versatz); }
+  if (an && versatz !== null) { seite.nach(anker_.getBoundingClientRect().top + lies() - versatz); }
 }
 
 export function start(optionen) {
@@ -845,10 +971,16 @@ export function start(optionen) {
     });
     // ohne Dauerschleife (Bildfolge) weckt das Scrollen die Schleife, solange der Film im Bild ist
     // (sonst nichts zu zeichnen; kommt er wieder ins Bild, startet sie der Beobachter unten)
-    window.addEventListener("scroll", function () {
+    seite.ziel().addEventListener("scroll", function () {
       zuletztGescrollt = window.performance.now();
-      if (an && (sichtbar || gleit.aktiv)) { starten(); }
+      if (an && (sichtbar || gleit.aktiv)) { yGemerkt = lies(); starten(); }
     }, { passive: true });
+    // ein Finger auf dem Glas, das Mausrad und Tasten zählen auch (frei): kein schwerer Schritt der Vorbereitung
+    // beginnt, während der Besucher gerade ansetzt. Alle passiv, das Scrollen selbst bleibt beim Browser.
+    var finger = function (e) { fingerAufGlas = !!(e.touches && e.touches.length); aktivitaet(); };
+    ["touchstart", "touchend", "touchcancel"].forEach(function (t) { window.addEventListener(t, finger, { passive: true }); });
+    window.addEventListener("wheel", aktivitaet, { passive: true });
+    window.addEventListener("keydown", aktivitaet, { passive: true });
     document.addEventListener("bewegung", steuern);
     // Änderungen der Einstellungen über eigene Abfragen, die sonst niemand liest: Chrome meldet eine Änderung
     // nicht, wenn dieselbe Abfrage vorher schon gelesen wurde, und gedaempft() liest mqReduce in jedem Bild
@@ -864,7 +996,7 @@ export function start(optionen) {
       if (e.target.closest(".nach-oben")) {
         e.stopImmediatePropagation(); e.preventDefault();
         gleit.aktiv = false;
-        window.scrollTo(0, 0);
+        seite.nach(0);
       }
     }, true);
     // Sprachschalter der Seite: Namen auf den Platten neu malen (Skala und Skript-Blatt lesen die Sprache je Bild)
@@ -878,6 +1010,7 @@ export function start(optionen) {
       new IntersectionObserver(function (eintraege) {
         sichtbar = eintraege[0].isIntersecting;
         root.classList.toggle("film-sichtbar", sichtbar);
+        if (an) { yGemerkt = lies(); }
         if (sichtbar && an) { starten(); }
         if (!sichtbar && an) { kopfPruefen(); }
       }, { rootMargin: "10% 0px 10% 0px" }).observe(vorhanden);
@@ -898,7 +1031,8 @@ export function start(optionen) {
 // zur Scrollposition s und Zeit t, kante Pixel im Quadrat (doppelt so groß gerendert und verkleinert),
 // Ecken außerhalb des Kreises schwarz, dazu die Lage der Schichtnamen im Überblick. welle (nur für die Schleife
 // der Bildfolge): eigene Zeit für das Winken im Hero, t führt dann die langsamen Bewegungen (szeneStart in
-// szenen.js). Hält die Bildschleife an; auf der Seite selbst ungenutzt.
+// szenen.js). Hält die Bildschleife an; auf der Seite selbst ungenutzt. Rechnet das 3D-Bild im Worker (nicht mit
+// ?film=nur3d, siehe oben), kommt das Ergebnis als Promise.
 export function standbild(s, t, kante, stufe, format, qualitaet, welle) {
   if (!gebaut || !bereit || !bild || !bild.standbild) { return null; }
   standbildModus = true;
@@ -907,23 +1041,26 @@ export function standbild(s, t, kante, stufe, format, qualitaet, welle) {
   zeit = t;
   zustand(s);
   var quelleBild = bild.standbild(Z, t, lay, kante, stufe, welle);
-  var c = document.createElement("canvas");
-  c.width = c.height = kante;
-  var ctx = c.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(quelleBild, 0, 0, kante, kante);
-  ctx.beginPath();
-  ctx.rect(0, 0, kante, kante);
-  ctx.arc(kante / 2, kante / 2, kante / 2 + 1, 0, Math.PI * 2);
-  ctx.fillStyle = "#000";
-  ctx.fill("evenodd");
-  var et = [];
-  if (Z.auf > 0.02 && Z.etiketten) {
-    for (var i = 0; i < Z.etiketten.length; i++) {
-      var e = Z.etiketten[i];
-      if (e) { et.push([e.j, +((e.x - lay.x) / lay.r).toFixed(4), +((e.y - lay.y) / lay.r).toFixed(4)]); }
-    }
+  return quelleBild && quelleBild.then ? quelleBild.then(fertigstellen) : fertigstellen(quelleBild);
+  function fertigstellen(quelleBild) {
+    var c = document.createElement("canvas");
+    c.width = c.height = kante;
+    var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(quelleBild, 0, 0, kante, kante);
+    ctx.beginPath();
+    ctx.rect(0, 0, kante, kante);
+    ctx.arc(kante / 2, kante / 2, kante / 2 + 1, 0, Math.PI * 2);
+    ctx.fillStyle = "#000";
+    ctx.fill("evenodd");
+    var et = [];
+    if (Z.auf > 0.02 && Z.etiketten) {
+      for (var i = 0; i < Z.etiketten.length; i++) {
+        var e = Z.etiketten[i];
+        if (e) { et.push([e.j, +((e.x - lay.x) / lay.r).toFixed(4), +((e.y - lay.y) / lay.r).toFixed(4)]); }
+      }
   }
   return { bild: c.toDataURL(format || "image/png", qualitaet || 0.8), etiketten: et, auf: +Z.auf.toFixed(4) };
+  }
 }
