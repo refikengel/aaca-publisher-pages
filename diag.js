@@ -34,6 +34,10 @@
   bar.appendChild(zu);
   box.appendChild(pre);
   box.appendChild(bar);
+  // erst zeigen, wenn diag.css da ist: ungestaltet stünde die Tafel sonst kurz oben in der Seite und spränge dann an
+  // ihren Platz (am Handy im eigenen Scrollrahmen gemessen: Layoutsprung 0,43)
+  box.hidden = true;
+  link.onload = link.onerror = function () { box.hidden = false; };
   document.body.appendChild(box);
 
   /* ------------------------------------------------------------------ Bildabstände */

@@ -21,7 +21,9 @@
   3D-Bild selbst auf Stufe 0 zu langsam oder fällt es aus, übernimmt wieder die Bildfolge. Abgeschaltet wird
   der Film dabei nie; nur wenn auch die Bilder der Folge nicht ladbar sind, ist er aus. Bleibt die Bildfolge das
   Bild, spielt sie im Stand am Anfang die vorberechnete Schleife des winkenden Roboters ab (heroSchleife), so wie
-  Echtzeit-3D dort von selbst weiterläuft.
+  Echtzeit-3D dort von selbst weiterläuft. Dieselbe Schleife überbrückt auch die Vorbereitung von Echtzeit-3D im
+  Worker (der Roboter winkt dann schon, statt Sekunden still zu stehen); das fertige 3D übernimmt bei einem Bild der
+  Schleife, das dem 3D-Bild zur selben Zeit gleicht (heroSchleife).
 
   Handys und Tablets bekommen Echtzeit-3D wie der Rechner, wenn sie es schaffen (Grafik, Speicher, Kerne und
   ein kurzer Rechentest, siehe grundFuerFolge; Einstellung BILDFOLGE_AUF_TOUCH in film.js). Die Bildfolge
@@ -352,8 +354,11 @@ function imStand() {
 // Anfang (Scrollposition 0, dort zeigt die Folge ihr erstes Bild), spielt der Kreis nach STAND_NACH_MS ohne Scrollen
 // die vorberechnete Schleife des winkenden Roboters ab, so wie Echtzeit-3D dort von selbst weiterläuft. Auch bei
 // „Bewegung reduzieren“: Die ruhige Eigenbewegung im Hero läuft dann ebenso, große Bewegungen bleiben ans Scrollen
-// gebunden (Regel von Refik vom 27.10.2026). Nicht nach der Pause-Taste (der Film ist dann aus), nicht im
-// Hintergrund und nicht, solange die Folge nur die Vorbereitung von Echtzeit-3D überbrückt. Gezeichnet wird nur
+// gebunden (Regel von Refik vom 27.10.2026). Nicht nach der Pause-Taste (der Film ist dann aus) und nicht im
+// Hintergrund. Überbrückt die Folge nur die Vorbereitung von Echtzeit-3D, spielt die Schleife, wenn das 3D im Worker
+// vorbereitet wird (im Hauptthread nähme sie ihm Zeit weg); das fertige 3D wartet dann auf Bild 0 oder HERO_BILD der
+// Schleife und übernimmt mit dessen Zeit (siehe heroSchleife und zeigen). Hält die Schleife vorher an (Scrollen),
+// übernimmt es sofort (siehe uebernehmen). Gezeichnet wird nur
 // das Bild im Kreis, und nur wenn ein neues Bild der Schleife dran ist (rund 12 je Sekunde); dazwischen schläft die
 // Bildschleife (Zeitgeber bis kurz vor dem nächsten Bild, dann requestAnimationFrame), statt jedes Bild des Browsers
 // zu wecken. Skala, Texte und Filmzeit bleiben dabei stehen, die Qualitätsmessung (nur für Echtzeit-3D) ebenso. Das
@@ -361,10 +366,20 @@ function imStand() {
 // in data-film-schleife: läuft, ruht (bereit, aber nicht am Anfang oder gerade gescrollt) oder aus:Grund.
 var SCHLEIFE_BIS = 0.1 / FOLGE.proHoehe;
 var hs = { laeuft: false, zeit: 0, letzte: 0, wert: "", wecker: 0, uhr: 0 };
+// fertig vorbereitetes Echtzeit-3D, das auf ein passendes Bild der Schleife wartet (siehe uebernehmen)
+var wartet3d = null;
+// Bild der Schleife, das das Standbild des Hero zeigt (der Roboter winkt): assets/img/hero.webp ist seit dem
+// 30.10.2026 eine Kopie von assets/film/s12.webp (nach neuem Rendern der Schleife mitkopieren). Die Folge zeigt es am
+// Anfang statt ihres ersten Bildes, bis gescrollt wird (folge.js, heroBild): Beim Ausblenden des Standbilds ändert
+// sich so nichts (vorher sah man den Arm doppelt). Die Schleife beginnt dann mit diesem Bild, Echtzeit-3D mit seiner
+// Zeit (siehe zeigen).
+var HERO_BILD = 12;
+// die Folge ist das Bild, oder sie überbrückt die Vorbereitung von Echtzeit-3D im Worker
+function schleifeErlaubt() { return ziel === "folge" || (ziel === "3d" && imWorkerMoeglich()); }
 // die Scrollposition ist sGl (ohne Scrollen seit STAND_NACH_MS gleich der Seite; sie hier neu zu lesen, zwänge den
 // Browser in jedem Durchlauf zu einer Stilberechnung)
 function heroSchleifeGeht() {
-  return !!(an && sichtbar && bild && bild.art === "folge" && ziel === "folge" && bild.schleifeStand && bild.schleifeStand() === "bereit" &&
+  return !!(an && sichtbar && bild && bild.art === "folge" && schleifeErlaubt() && bild.schleifeStand && bild.schleifeStand() === "bereit" &&
     !geht && !gleit.aktiv && sGl < SCHLEIFE_BIS);
 }
 // anhalten (der Zeitgeber fällt weg) und den Zustand pflegen
@@ -376,12 +391,28 @@ function heroSchleifeAus() {
 // ein Durchlauf von schleife(): true, wenn die Schleife des Hero ihn übernommen hat (sie plant den nächsten selbst)
 function heroSchleife(jetzt) {
   if (ruhe() < STAND_NACH_MS || !heroSchleifeGeht()) { heroSchleifeAus(); return false; }
-  if (!hs.laeuft) { hs.laeuft = true; hs.zeit = 0; hs.letzte = jetzt; heroSchleifePflegen(); }
+  if (!hs.laeuft) {
+    hs.laeuft = true;
+    hs.zeit = bild.heroBildZeigt && bild.heroBildZeigt() ? HERO_BILD * bild.schleife.dauer / bild.schleife.anzahl : 0;
+    hs.letzte = jetzt;
+    heroSchleifePflegen();
+  }
   hs.zeit += klemme((jetzt - hs.letzte) / 1000, 0, 0.1);
   hs.letzte = jetzt;
   // die Filmzeit läuft dabei nicht weiter (wie im Stand der Folge bisher); das erste Bild danach bekommt ein kurzes dt
   letzte = jetzt;
-  var n = bild.schleife.anzahl, takt = bild.schleife.dauer / n, k = Math.floor(hs.zeit / takt);
+  var n = bild.schleife.anzahl, dauer = bild.schleife.dauer, takt = dauer / n;
+  if (hs.zeit >= dauer) { hs.zeit -= dauer * Math.floor(hs.zeit / dauer); }
+  var k = Math.floor(hs.zeit / takt);
+  // wartet Echtzeit-3D, übernimmt es, sobald Bild 0 oder HERO_BILD dran ist, mit der Zeit dieses Bildes: dort gleicht
+  // die Schleife dem 3D-Bild (Bild 0 genau; bei HERO_BILD liegen die langsamen Bewegungen 0,06 s auseinander, die
+  // Schleife führt sie hin und zurück, das 3D nur vorwärts)
+  if (wartet3d && (k === 0 || k === HERO_BILD)) {
+    var w = wartet3d;
+    wartet3d = null;
+    hs.laeuft = false;
+    if (kommt === w) { zeigen(w, k * takt); return true; }
+  }
   bild.schleifeZeichnen(k % n);
   var warten = ((k + 1) * takt - hs.zeit) * 1000 - 12;
   if (warten > 4) {
@@ -403,7 +434,7 @@ function heroSchleifePflegen() {
   var w;
   if (!an) { w = root.classList.contains("ruhe") ? "aus:Pause" : "aus:Film aus"; }
   else if (!bild) { w = "aus:nicht geladen"; }
-  else if (bild.art !== "folge" || ziel !== "folge") { w = "aus:Echtzeit-3D"; }
+  else if (bild.art !== "folge" || !schleifeErlaubt()) { w = "aus:Echtzeit-3D"; }
   else {
     if (bild.schleifeLaden) { bild.schleifeLaden(); }
     var stand = bild.schleifeStand ? bild.schleifeStand() : "nicht geladen";
@@ -416,6 +447,12 @@ function schleife(jetzt) {
   raf = 0;
   if (!an || document.hidden || standbildModus) { heroSchleifeAus(); return; }
   if (heroSchleife(jetzt)) { return; }
+  // die Schleife hat angehalten (Scrollen), während Echtzeit-3D auf ihr Ende wartete: es übernimmt gleich
+  if (wartet3d && !hs.laeuft) {
+    var w3 = wartet3d;
+    wartet3d = null;
+    if (kommt === w3) { zeigen(w3); return; }
+  }
   var stand = sichtbar && imStand();
   if (stand && jetzt - letzteZeichnung < standTakt() - 2) {
     // dieses Bild auslassen; die Zeit läuft weiter (letzte bleibt stehen, dt im nächsten gezeichneten Bild stimmt)
@@ -553,10 +590,21 @@ function zeichneBild(messen, leicht) {
     ausgefallen(q);
     return;
   }
-  // die vorige Quelle zeichnet bis zum Ende der Überblendung mit (sonst stünde sie still, wenn gescrollt wird)
+  // die vorige Quelle zeichnet bis zum Ende der Überblendung mit (sonst stünde sie still, wenn gescrollt wird); nach
+  // dem Ende der Schleife des Hero, solange die Seite am Anfang steht, das Bild der Schleife zur Zeit des 3D-Bildes
+  // (Leerlauf ab null: dieselbe Bewegung), sonst das zur Scrollstelle
   if (g) {
     if (window.performance.now() > g.bis) { geht = null; g.quelle.freigeben(); }
-    else { try { g.quelle.zeichne(Z, zeit, lay); } catch (fehler) { ausgefallen(g.quelle); } }
+    else {
+      try {
+        if (g.schleife && sGl < SCHLEIFE_BIS && g.quelle.schleife) {
+          var sn = g.quelle.schleife.anzahl;
+          g.quelle.schleifeZeichnen(Math.floor(leerlauf * sn / g.quelle.schleife.dauer) % sn);
+        } else {
+          g.quelle.zeichne(Z, zeit, lay);
+        }
+      } catch (fehler) { ausgefallen(g.quelle); }
+    }
   }
   try {
     skala.zeichne(Z, zeit, P);
@@ -624,7 +672,7 @@ function fehlerAus() { kaputt = true; ausschalten("fehler"); }
 // alle Quellen freigeben (nach einem Ausfall des Films: Grafikspeicher und Bilder nicht länger halten)
 function alleFreigeben() {
   [bild, kommt && kommt.quelle, geht && geht.quelle].forEach(function (q) { if (q) { q.freigeben(); } });
-  bild = null; kommt = null; geht = null; bereit = false;
+  bild = null; kommt = null; geht = null; bereit = false; wartet3d = null;
 }
 
 // aktuelle Quelle und Qualitätsstufe am Dokument (zur Fehlersuche und für Tests; ohne Wirkung auf die Gestaltung)
@@ -721,8 +769,9 @@ function weiterschalten() {
 
 function vorbereiten(art) {
   if (kommt && kommt.art === art) {
-    // schon unterwegs; nach einer Pause dort weitermachen, wo die Vorbereitung angehalten hat
-    if (!kommt.laeuft) { vorbereitungLaufen(kommt); }
+    // schon unterwegs; nach einer Pause dort weitermachen, wo die Vorbereitung angehalten hat (fertig und wartend
+    // auf das Ende der Schleife: nichts zu tun)
+    if (!kommt.laeuft && kommt !== wartet3d) { vorbereitungLaufen(kommt); }
     return;
   }
   if (kommt) { verwerfen(kommt); }
@@ -732,6 +781,7 @@ function vorbereiten(art) {
 
 function verwerfen(k) {
   if (kommt === k) { kommt = null; }
+  if (wartet3d === k) { wartet3d = null; }
   if (k.quelle) { k.quelle.freigeben(); }
 }
 
@@ -741,7 +791,7 @@ function vorbereitungLaufen(k) {
   // läuft schon ein Bild (die Bildfolge), legt die Vorbereitung von Echtzeit-3D ihre schweren Schritte nicht mitten
   // ins Scrollen (frei); das Anlegen des Grafikkontexts zählt dazu
   var mitRuhe = k.art === "3d";
-  var holen = Promise.resolve(k.modul || (k.art === "3d" ? modul3dHolen() : import("./folge.js?v=14")));
+  var holen = Promise.resolve(k.modul || (k.art === "3d" ? modul3dHolen() : import("./folge.js?v=19")));
   holen.then(function (m) {
     k.modul = m;
     // im Worker entsteht der Kontext dort, und die Vorbereitung hält hier nichts auf
@@ -761,7 +811,7 @@ function vorbereitungLaufen(k) {
             { softwareErlaubt: pruef === "nur3d" });
         } else {
           k.quelle = m.baue(leinwand, function () { if (an) { starten(); } }, function () { ausgefallen(k.quelle); },
-            { nurNahe: ziel === "3d" });
+            { nurNahe: ziel === "3d", heroBild: HERO_BILD });
         }
       } catch (fehler) {
         leinwand.parentNode.removeChild(leinwand);
@@ -777,7 +827,7 @@ function vorbereitungLaufen(k) {
   }).then(function (fertig) {
     k.laeuft = false;
     if (kommt !== k || !fertig || !an) { return; }
-    zeigen(k);
+    uebernehmen(k);
   }).then(null, function (fehler) {
     k.laeuft = false;
     if (kommt !== k) { return; }
@@ -794,8 +844,16 @@ function vorbereitungLaufen(k) {
   });
 }
 
-// die vorbereitete Quelle übernimmt; die bisherige blendet darunter aus und wird danach freigegeben
-function zeigen(k) {
+// Spielt im Kreis gerade die Schleife des Hero (Überbrückung), wartet fertiges Echtzeit-3D auf ein passendes Bild
+// der Schleife (heroSchleife; hält sie vorher an, übernimmt es dann sofort, siehe schleife), sonst übernimmt es gleich
+function uebernehmen(k) {
+  if (k.art === "3d" && hs.laeuft) { wartet3d = k; return; }
+  zeigen(k);
+}
+
+// die vorbereitete Quelle übernimmt; die bisherige blendet darunter aus und wird danach freigegeben. schleifenZeit:
+// Echtzeit-3D übernimmt aus der Schleife des Hero, bei dieser Zeit ihres Durchlaufs (siehe heroSchleife, zeichneBild)
+function zeigen(k, schleifenZeit) {
   kommt = null;
   var q = k.quelle, vorher = bild;
   bild = q;
@@ -804,10 +862,16 @@ function zeigen(k) {
   if (vorher) {
     if (geht) { geht.quelle.freigeben(); }
     // so lange wie die Überblendung im Stylesheet (gedämpft kürzer), mit etwas Spielraum
-    geht = { quelle: vorher, bis: window.performance.now() + (gedaempft() ? 400 : 1100) };
+    geht = { quelle: vorher, bis: window.performance.now() + (gedaempft() ? 400 : 1100), schleife: schleifenZeit !== undefined };
   }
-  // die neue Zeit im Leerlauf beginnt bei null: das erste 3D-Bild gleicht dem Bild der Folge an derselben Stelle
-  if (vorher && vorher.art === "folge" && q.art === "3d") { leerlauf = 0; }
+  // die neue Zeit im Leerlauf beginnt bei null: das erste 3D-Bild gleicht dem Bild der Folge an derselben Stelle;
+  // aus der Schleife bei ihrer Zeit, und zeigt die Folge noch das Bild der Schleife, das dem Standbild gleicht, bei
+  // dessen Zeit (der Roboter winkt dann)
+  if (vorher && vorher.art === "folge" && q.art === "3d") {
+    if (schleifenZeit !== undefined) { leerlauf = schleifenZeit; }
+    else if (vorher.heroBildZeigt && vorher.heroBildZeigt() && vorher.schleife) { leerlauf = HERO_BILD * vorher.schleife.dauer / vorher.schleife.anzahl; }
+    else { leerlauf = 0; }
+  }
   q.leinwand.classList.remove("wartet");
   stufeMelden();
   if (q.art === "folge" && ziel === "folge" && q.vollLaden) { q.vollLaden(); }
